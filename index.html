@@ -1,0 +1,1614 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="POLI-ROUTE">
+<title>POLI-ROUTE</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0b1220;color:#f2f5fa;color-scheme:dark;-webkit-text-size-adjust:100%}
+body{max-width:650px;margin:auto;padding:18px;padding-top:calc(18px + env(safe-area-inset-top));padding-right:calc(18px + env(safe-area-inset-right));padding-bottom:calc(18px + env(safe-area-inset-bottom));padding-left:calc(18px + env(safe-area-inset-left))}
+h1{font-size:26px}h4{font-size:16px;margin:16px 0 8px}
+nav{display:flex;gap:7px;margin:18px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+nav button{white-space:nowrap;flex-shrink:0}
+.summary{border-left:3px solid #65afff;padding-left:12px;margin:12px 0}
+.warn{color:#ffd78b}
+.big{font-size:27px;font-weight:800;color:#a8d8ff}
+.times{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0 4px}
+.times div{background:#0c1a2d;border-radius:10px;padding:10px 8px}
+.times span{display:block;font-size:12px;color:#b3c3da}
+.times b{display:block;font-size:20px;line-height:1.25;color:#a8d8ff;word-break:break-word}
+.plan-card{background:#0c1a2d;border-radius:12px;padding:12px;margin:10px 0}
+.plan-card ol{margin:8px 0;padding-left:1.4em}
+.plan-card li{margin:6px 0;line-height:1.45}
+#todayResult h3{font-size:16px;margin:14px 0 6px}
+#todayResult button{width:100%;margin:6px 0}
+#todayResult button.navstart{font-size:17px;margin-top:0}
+.line{border-top:1px solid #40516a;padding:10px 0}
+button,input,textarea,select,a{touch-action:manipulation}
+button{background:#243b59;color:white;border:0;border-radius:9px;padding:11px;cursor:pointer;min-height:44px}
+button.primary{background:#65afff;color:#081322;font-weight:bold}
+input,textarea,select{box-sizing:border-box;width:100%;padding:12px;border-radius:9px;border:1px solid #3b5476;background:#0c1a2d;color:white;margin:5px 0 13px;font:inherit;font-size:16px;min-height:44px}
+textarea{min-height:88px}
+input[type="date"],input[type="time"],input[type="file"]{color-scheme:dark}
+.panel{background:#17243a;border-radius:15px;padding:16px;margin:12px 0}
+.item{padding:13px 0;border-bottom:1px solid #3b4b62}
+.muted{color:#b3c3da;font-size:13px;line-height:1.6}
+.hidden{display:none}
+.buttons{display:flex;flex-wrap:wrap;gap:6px}
+.buttons button{font-size:12px;padding:9px}
+label{font-size:13px;color:#b3c3da}
+#state{font-size:12px;color:#a9edb9}
+.suggest{background:#0c1a2d;border:1px solid #3b5476;border-radius:9px;margin:-8px 0 13px;max-height:220px;overflow:auto;-webkit-overflow-scrolling:touch}
+.suggest button{display:block;width:100%;text-align:left;background:#10233a;border-radius:0;margin:0}
+#diagnostics{word-break:break-word}
+</style>
+</head>
+<body>
+<h1>🚙 POLI-ROUTE</h1>
+<p class="muted">秘書の運転ノウハウを継ぐ、プライベート・ルート帳</p>
+<p id="state">起動準備中…</p>
+<p id="diagnostics" class="muted"></p>
+<p class="muted">v5：公開用の空アプリ。機密データは別途読み込んでください。</p>
+<nav>
+<button type="button" class="primary" onclick="tab('today')">本日の運転</button>
+<button type="button" onclick="tab('places')">施設検索</button>
+<button type="button" onclick="tab('routes')">ルート</button>
+<button type="button" onclick="tab('planner')">出発逆算</button>
+<button type="button" onclick="tab('rules')">運転ルール</button>
+<button type="button" onclick="tab('parking')">乗降・駐車</button>
+<button type="button" onclick="tab('data')">データ管理</button>
+</nav>
+
+<section id="today">
+<div class="panel">
+<h2>今日の運転プラン</h2>
+<p class="muted">目的地と到着希望時刻で、この端末に保存した施設・ルート・乗降・駐車を集めます。無い項目は未登録と出します。走行時間は手入力です。交通情報、料金、満空、規制、一方通行は調べません。</p>
+<label>出発地（入力した内容はこの端末内に保存）</label>
+<input id="todayOrigin" placeholder="出発拠点の住所" autocomplete="off">
+<label>目的地（施設名または住所）</label>
+<input id="todayDest" list="placeSuggestions" placeholder="登録施設を検索、または住所を入力" autocomplete="off">
+<datalist id="placeSuggestions"></datalist>
+<div id="todaySuggest" class="suggest hidden"></div>
+<label>到着希望日</label>
+<input id="todayDate" type="date">
+<label>到着希望時刻</label>
+<input id="todayTime" type="time" value="18:00">
+<label>走行予定時間（分・Googleマップで確認）</label>
+<input id="todayDrive" type="number" min="1" placeholder="例：35" inputmode="numeric">
+<label>余裕の持ち方</label>
+<select id="todayBuffer">
+<option value="0">急ぎ：0分</option>
+<option value="10" selected>通常：10分</option>
+<option value="20">余裕あり：20分</option>
+<option value="30">かなり余裕：30分</option>
+</select>
+<button type="button" class="primary" onclick="buildToday()">運転プランを作成</button>
+<button type="button" onclick="todayMap()">Googleマップで所要時間を確認</button>
+<p class="muted">計算結果は端末内で処理。Googleマップを開くと入力した地点情報がGoogleに渡ります。</p>
+</div>
+<div id="todayResult" class="panel"><p class="muted">目的地と到着時刻を設定して「運転プランを作成」を押してね。</p></div>
+</section>
+
+<section id="places">
+<div class="panel">
+<h3>施設を探す</h3>
+<input id="search" placeholder="店名・区・住所を検索" autocomplete="off" oninput="render()">
+<p id="count" class="muted"></p>
+<div id="list"></div>
+</div>
+<div class="panel">
+<h3>施設と車寄せを追加</h3>
+<label>施設名</label>
+<input id="pn" autocomplete="off">
+<label>住所</label>
+<input id="pa" autocomplete="off">
+<label>車寄せ・進入方向・注意点</label>
+<textarea id="pm"></textarea>
+<button type="button" class="primary" onclick="addPlace()">施設を保存</button>
+</div>
+</section>
+
+<section id="routes" class="hidden">
+<div class="panel" id="routeEditor">
+<h3>オリジナルルート・交差点指示</h3>
+<p class="muted">通過地点は通る順番に登録します。右折・左折・直進・通過は、自分で記録した指示です。交通規制や一方通行を調べて案内を作る機能はありません。現地の標識と規制を優先してください。</p>
+<p class="muted">地図上をタップして地点を選ぶ機能は、外部の地図サービスがないと住所を取得できないため入れていません。</p>
+<label>ルート名</label>
+<input id="rn" placeholder="例：夕方の東京駅行き" autocomplete="off">
+<label>出発地</label>
+<input id="rf" autocomplete="off">
+<label>目的地・車寄せの住所</label>
+<input id="rt" autocomplete="off">
+<h4>通過地点</h4>
+<label>地点名</label>
+<input id="rp" placeholder="交差点・施設・住所" autocomplete="off">
+<div id="rpSuggest" class="suggest hidden"></div>
+<label>交差点での指示</label>
+<select id="rpTurn">
+<option>右折</option>
+<option>左折</option>
+<option>直進</option>
+<option selected>通過</option>
+</select>
+<label>区分</label>
+<select id="rpPriority">
+<option value="must">必須</option>
+<option value="prefer" selected>優先</option>
+</select>
+<button type="button" onclick="addDraftPoint()">地点を追加</button>
+<label>複数地点をまとめて追加（1行に1地点。指示は通過、区分は優先）</label>
+<textarea id="rv" placeholder="地点1&#10;地点2"></textarea>
+<button type="button" onclick="addDraftLines()">まとめて追加</button>
+<div id="draftPoints"></div>
+<h4>避けたい道路</h4>
+<label>道路名</label>
+<input id="raRoad" placeholder="例：〇〇通り" autocomplete="off">
+<label>理由</label>
+<input id="raReason" placeholder="例：夕方に混む" autocomplete="off">
+<button type="button" onclick="addDraftAvoid()">避けたい道路を追加</button>
+<div id="draftAvoids"></div>
+<p class="warn">Googleマップに渡せる経由地は先頭3件までです。右折・左折・直進・必須の道路はGoogleマップでは強制できません。地点名だけを渡し、指示そのものは送りません。</p>
+<label>使う時間帯</label>
+<select id="rh">
+<option>いつでも</option>
+<option>朝</option>
+<option>昼</option>
+<option>夕方</option>
+<option>夜</option>
+</select>
+<label>選ぶ理由</label>
+<textarea id="rm"></textarea>
+<button type="button" class="primary" id="routeSave" onclick="addRoute()">ルートを保存</button>
+<button type="button" onclick="clearRouteForm()">入力をクリア</button>
+</div>
+<div class="panel">
+<h3>保存したルート</h3>
+<p class="muted">表示している曲がり方は記録です。走行できる道の保証ではなく、規制や一方通行より優先されません。</p>
+<div id="routesList"></div>
+</div>
+</section>
+
+<section id="planner" class="hidden">
+<div class="panel">
+<h3>出発時刻を逆算</h3>
+<label>出発拠点（端末内保存）</label>
+<input id="origin" placeholder="出発住所" autocomplete="off">
+<label>目的地</label>
+<input id="destination" placeholder="施設名または住所" autocomplete="off">
+<div id="destSuggest" class="suggest hidden"></div>
+<label>到着希望日</label>
+<input id="arrivalDate" type="date">
+<label>到着希望時刻</label>
+<input id="arrivalTime" type="time" value="18:00">
+<label>予測走行時間（分）※手入力</label>
+<input id="driveMinutes" type="number" min="1" placeholder="Googleマップで確認した時間" inputmode="numeric">
+<label>余裕時間</label>
+<select id="bufferMinutes">
+<option value="0">急ぎ 0分</option>
+<option value="10" selected>通常 10分</option>
+<option value="20">余裕あり 20分</option>
+<option value="30">かなり余裕 30分</option>
+</select>
+<button type="button" class="primary" onclick="calculateDeparture()">出発時刻を計算</button>
+<button type="button" onclick="plannerMap()">Googleマップで所要時間を確認</button>
+<div id="departureResult" class="panel muted">到着日時と予測走行時間を入力してください。</div>
+<p class="muted">交通状況は自動取得していません。Googleマップで所要時間を確認して入力してください。経由地指定で右左折を強制することはできません。</p>
+</div>
+</section>
+
+<section id="rules" class="hidden">
+<div class="panel">
+<h3>運転のこだわり・指示を登録</h3>
+<label>適用方面</label>
+<input id="ruleArea" placeholder="全方面／新宿方面" autocomplete="off">
+<label>道路・交差点</label>
+<input id="rulePoint" autocomplete="off">
+<label>優先度</label>
+<select id="ruleLevel">
+<option value="must">必ず通る</option>
+<option value="prefer">優先</option>
+<option value="avoid">回避</option>
+<option value="caution">注意</option>
+</select>
+<label>曲がり方</label>
+<select id="ruleTurn">
+<option value="">指定なし</option>
+<option>右折</option>
+<option>左折</option>
+<option>直進</option>
+</select>
+<label>時間帯</label>
+<select id="ruleTime">
+<option>いつでも</option>
+<option>朝</option>
+<option>昼</option>
+<option>夕方</option>
+<option>夜</option>
+</select>
+<label>理由・注意点</label>
+<textarea id="ruleMemo"></textarea>
+<button type="button" class="primary" onclick="addRule()">ルールを保存</button>
+</div>
+<div class="panel">
+<h3>登録済みの運転ルール</h3>
+<div id="rulesList"></div>
+</div>
+</section>
+
+<section id="parking" class="hidden">
+<div class="panel">
+<h3>乗降・駐車アシスタント</h3>
+<p class="muted">安全に降車できる場所と、駐車場の候補を記録。料金は確認日時付きの参考情報です。</p>
+<label>対象施設名</label>
+<input id="parkPlace" placeholder="施設検索で選択、または入力" autocomplete="off">
+<div id="parkSuggest" class="suggest hidden"></div>
+<label>施設の住所（任意）</label>
+<input id="parkAddress" placeholder="ナビの目的地に利用" autocomplete="off">
+<label>安全な乗降位置・徒歩案内</label>
+<textarea id="dropoff" placeholder="例：施設の正面車寄せ。入口は右側。停車規制を現地確認"></textarea>
+<label>乗降場所の確認状況</label>
+<select id="dropStatus">
+<option>要現地確認</option>
+<option>現地確認済み</option>
+<option>利用不可</option>
+</select>
+<label>駐車場名</label>
+<input id="parkName" placeholder="例：〇〇パーキング" autocomplete="off">
+<label>駐車場住所</label>
+<input id="parkLocation" placeholder="正確な入口の住所" autocomplete="off">
+<label>用途</label>
+<select id="parkMode">
+<option value="cheap">節約候補</option>
+<option value="fast">急ぎ候補</option>
+<option value="both">両方</option>
+</select>
+<label>参考料金（円）</label>
+<input id="parkPrice" type="number" min="0" placeholder="例：1200" inputmode="numeric">
+<label>料金の対象時間（分）</label>
+<input id="parkDuration" type="number" min="1" value="120" inputmode="numeric">
+<label>料金確認日</label>
+<input id="parkChecked" type="date">
+<label>入庫・徒歩の注意点</label>
+<textarea id="parkMemo" placeholder="入口の向き、車高制限、徒歩時間、満車時の代替案"></textarea>
+<button type="button" class="primary" onclick="saveParking()">乗降・駐車情報を保存</button>
+<p class="muted">※路上での違法な駐停車を推奨しません。停車規制、歩行者の安全、施設の許可を優先してください。</p>
+</div>
+<div class="panel">
+<h3>登録済みの乗降・駐車情報</h3>
+<input id="parkSearch" placeholder="施設・駐車場名で絞り込み" autocomplete="off" oninput="renderParking()">
+<div id="parkingList"></div>
+</div>
+<div class="panel">
+<h3>PPPark!で新しい候補を探す</h3>
+<p class="muted">外部アプリへの自動住所引き継ぎは未確認。下のボタンは公式検索サイトを開きます。iPhoneのPPPark!アプリでも同じ施設名を検索してください。</p>
+<button type="button" onclick="openUrl('https://pppark.com/')">PPPark!検索サイトを開く ↗</button>
+</div>
+</section>
+
+<section id="data" class="hidden">
+<div class="panel">
+<h3>非公開施設リストの取り込み</h3>
+<p class="muted">別ファイルのJSONを選んで読み込み。アプリに施設データは埋め込まれていない。</p>
+<input type="file" id="file" accept=".json,application/json,text/json,text/plain,.txt">
+<button type="button" onclick="importFile()">取り込む</button>
+</div>
+<div class="panel">
+<h3>バックアップ</h3>
+<button type="button" class="primary" onclick="backup()">全データを書き出す</button>
+<button type="button" onclick="copyBackup()">JSONをコピー</button>
+<p id="backupMsg" class="muted">施設・ルート・運転ルールはこの端末の中だけに保存します。サーバーへは送りません。定期的にバックアップしてください。iPhoneで保存が始まらないときは「JSONをコピー」するか、下のテキストを長押ししてコピーしてください。画面用のキャッシュはアプリのファイルだけで、入力したデータは入れません。</p>
+<textarea id="backupText" readonly class="hidden" rows="8" spellcheck="false"></textarea>
+</div>
+<div class="panel muted">非公開の会食相手・日程・移動履歴は登録しないでください。Googleマップ起動時には指定した住所・経由地がGoogleへ送信されます。停車や進入は現地規制を優先してください。経由地指定は走行道路の完全固定ではありません。</div>
+</section>
+
+<script>
+(function () {
+  function showBootError(msg) {
+    var st = document.getElementById('state');
+    if (!st) return;
+    st.textContent = 'エラー：' + msg;
+    st.setAttribute('data-booted', '1');
+  }
+  window.addEventListener('error', function (e) {
+    if (e.target && e.target !== window) return;
+    showBootError((e && e.message) ? e.message : 'スクリプトを実行できません');
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var reason = e && e.reason;
+    showBootError(reason && reason.message ? reason.message : '処理に失敗しました');
+  });
+  window.setTimeout(function () {
+    var st = document.getElementById('state');
+    if (!st) return;
+    var text = st.textContent || '';
+    if (text.indexOf('起動準備中') !== -1 || text.indexOf('読み込み中') !== -1) {
+      showBootError('起動処理が完了しませんでした。ページを再読み込みしてください');
+    }
+  }, 2000);
+})();
+</script>
+<script>
+'use strict';
+// v4 dashboard: all calculations and matching are local; no background GPS or network requests.
+var db = {places: [], routes: [], rules: [], parking: [], origin: ''};
+var draftPoints = [];
+var draftAvoids = [];
+var editingRouteId = '';
+var nidSeq = 0;
+var STORAGE_KEY = 'poli-route-v5';
+var MAP_WAYPOINTS = 3;
+
+function $(id) { return document.getElementById(id); }
+function v(id) {
+  var el = $(id);
+  return el ? String(el.value || '').trim() : '';
+}
+function asText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+  });
+}
+function nid(prefix) {
+  nidSeq += 1;
+  return prefix + Date.now().toString(36) + '_' + nidSeq;
+}
+function clearNode(el) {
+  if (!el) return;
+  if (typeof el.replaceChildren === 'function') el.replaceChildren();
+  else while (el.firstChild) el.removeChild(el.firstChild);
+}
+function setState(text) {
+  var st = $('state');
+  if (st) st.textContent = text;
+}
+function safeCall(fn) {
+  try { fn(); }
+  catch (e) { setState('エラー：' + (e && e.message ? e.message : '表示に失敗しました')); }
+}
+function levelLabel(level) {
+  return {must: '必ず通る', prefer: '優先', avoid: '回避', caution: '注意'}[level] || asText(level);
+}
+function modeLabel(mode) {
+  return mode === 'fast' ? '急ぎ' : mode === 'cheap' ? '節約' : '両方';
+}
+function placeAddress(p) {
+  if (!p) return '';
+  return [asText(p.ward), asText(p.address)].filter(Boolean).join(' ');
+}
+function placeLabel(p) {
+  return placeAddress(p) || asText(p && p.name);
+}
+function htmlBtn(act, id, label) {
+  return '<button type="button" data-act="' + esc(act) + '" data-id="' + esc(id) + '">' + esc(label) + '</button>';
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+function localISODate(date) {
+  var d = date || new Date();
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+function formatDeparture(dt) {
+  return dt.getFullYear() + '/' + pad2(dt.getMonth() + 1) + '/' + pad2(dt.getDate()) + ' ' + pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+}
+function parseLocalDateTime(dateStr, timeStr) {
+  var d = String(dateStr || '').trim();
+  var t = String(timeStr || '').trim();
+  var dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  var tm = /^(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/.exec(t);
+  if (!dm || !tm) return null;
+  var year = Number(dm[1]);
+  var month = Number(dm[2]);
+  var day = Number(dm[3]);
+  var hour = Number(tm[1]);
+  var minute = Number(tm[2]);
+  var second = Number(tm[3] || '0');
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59) return null;
+  var dt = new Date(year, month - 1, day, hour, minute, second);
+  if (isNaN(dt.getTime())) return null;
+  if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
+  return dt;
+}
+function normalizePlace(p) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  var o = Object.assign({}, p);
+  o.id = p.id != null && String(p.id) !== '' ? String(p.id) : nid('p');
+  o.name = asText(p.name);
+  o.address = asText(p.address);
+  o.ward = asText(p.ward);
+  o.memo = asText(p.memo);
+  if (!o.name && !o.address && !o.memo && !o.ward) return null;
+  return o;
+}
+function normalizeVia(via) {
+  if (Array.isArray(via)) return via.map(asText).map(function (s) { return s.trim(); }).filter(Boolean);
+  if (via) return String(via).split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+  return [];
+}
+function normalizeTurn(turn) {
+  var t = asText(turn).trim();
+  return t || '通過';
+}
+function normalizePriority(priority) {
+  var p = asText(priority).trim();
+  if (p === 'must' || p === '必須') return 'must';
+  return 'prefer';
+}
+function priorityLabel(priority) {
+  return normalizePriority(priority) === 'must' ? '必須' : '優先';
+}
+function normalizePoint(p) {
+  if (typeof p === 'string') {
+    var text = p.trim();
+    if (!text) return null;
+    return {place: text, turn: '通過', priority: 'prefer'};
+  }
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  var place = asText(p.place || p.name || p.point).trim();
+  if (!place) return null;
+  return {place: place, turn: normalizeTurn(p.turn), priority: normalizePriority(p.priority || p.level)};
+}
+function pointsFromRoute(r) {
+  var fromPoints = [];
+  if (r && Array.isArray(r.points)) fromPoints = r.points.map(normalizePoint).filter(Boolean);
+  if (fromPoints.length) return fromPoints;
+  return normalizeVia(r && r.via).map(function (place) {
+    return {place: place, turn: '通過', priority: 'prefer'};
+  });
+}
+function normalizeAvoid(a) {
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return null;
+  var road = asText(a.road || a.name).trim();
+  var reason = asText(a.reason || a.memo).trim();
+  if (!road && !reason) return null;
+  return {road: road, reason: reason};
+}
+function normalizeRoute(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  var o = Object.assign({}, r);
+  o.id = r.id != null && String(r.id) !== '' ? String(r.id) : nid('r');
+  o.name = asText(r.name);
+  o.from = asText(r.from);
+  o.to = asText(r.to);
+  o.time = asText(r.time);
+  o.memo = asText(r.memo);
+  o.points = pointsFromRoute(r);
+  o.avoids = Array.isArray(r.avoids) ? r.avoids.map(normalizeAvoid).filter(Boolean) : [];
+  o.via = o.points.map(function (p) { return p.place; });
+  if (!o.name && !o.from && !o.to && !o.points.length) return null;
+  return o;
+}
+function normalizeRule(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  var o = Object.assign({}, r);
+  o.id = r.id != null && String(r.id) !== '' ? String(r.id) : nid('rule');
+  o.area = asText(r.area);
+  o.point = asText(r.point);
+  o.level = asText(r.level);
+  o.turn = asText(r.turn);
+  o.time = asText(r.time);
+  o.memo = asText(r.memo);
+  if (!o.point && !o.memo && !o.area) return null;
+  return o;
+}
+function normalizeParking(p) {
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  var o = Object.assign({}, p);
+  o.id = p.id != null && String(p.id) !== '' ? String(p.id) : nid('pk');
+  o.place = asText(p.place);
+  o.address = asText(p.address);
+  o.dropoff = asText(p.dropoff);
+  o.status = asText(p.status);
+  o.name = asText(p.name);
+  o.location = asText(p.location);
+  o.mode = asText(p.mode);
+  o.price = p.price == null ? '' : asText(p.price);
+  o.duration = p.duration == null ? '' : asText(p.duration);
+  o.checked = asText(p.checked);
+  o.memo = asText(p.memo);
+  if (!o.place && !o.name && !o.dropoff && !o.location) return null;
+  return o;
+}
+function tab(t) {
+  var names = ['today', 'places', 'routes', 'planner', 'rules', 'parking', 'data'];
+  for (var i = 0; i < names.length; i++) {
+    var el = $(names[i]);
+    if (el) el.classList.toggle('hidden', names[i] !== t);
+  }
+  var buttons = document.querySelectorAll('nav button');
+  for (var j = 0; j < buttons.length; j++) buttons[j].classList.toggle('primary', names[j] === t);
+}
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    setState('準備OK・端末内保存');
+    return true;
+  } catch (e) {
+    setState('保存できません');
+    alert('保存に失敗。SafariでHTTPSサイトとして開いてください');
+    return false;
+  }
+}
+function openUrl(url) {
+  if (!url) return;
+  var win = null;
+  try { win = window.open(url, '_blank'); } catch (e) { win = null; }
+  if (win) {
+    try { win.opener = null; } catch (e2) {}
+    return;
+  }
+  var a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  if (a.parentNode) a.parentNode.removeChild(a);
+}
+function maps(to, from, via) {
+  if (!to) return alert('目的地を入力してください');
+  try {
+    var url = new URL('https://www.google.com/maps/dir/');
+    url.searchParams.set('api', '1');
+    url.searchParams.set('travelmode', 'driving');
+    url.searchParams.set('destination', to);
+    if (from) url.searchParams.set('origin', from);
+    var points = (via || []).map(function (x) { return String(x).trim(); }).filter(Boolean).slice(0, MAP_WAYPOINTS);
+    if (points.length) url.searchParams.set('waypoints', points.join('|'));
+    openUrl(url.toString());
+  } catch (e) {
+    alert('地図を開けません：' + (e && e.message ? e.message : '不明'));
+  }
+}
+function render() {
+  var listEl = $('list');
+  var countEl = $('count');
+  if (!listEl || !countEl) return;
+  var q = v('search').toLowerCase();
+  var places = Array.isArray(db.places) ? db.places : [];
+  var list = places.filter(function (p) {
+    if (!p) return false;
+    return [p.name, p.address, p.ward, p.memo].join(' ').toLowerCase().includes(q);
+  });
+  countEl.textContent = places.length + '件登録 / ' + list.length + '件一致（先頭40件）';
+  listEl.innerHTML = list.slice(0, 40).map(function (p) {
+    var where = [p.ward, p.address].filter(Boolean).join(' ');
+    return '<div class="item"><b>' + esc(p.name) + '</b><p class="muted">' + esc(where) + '<br>' + esc(p.memo) + '</p><div class="buttons">' +
+      htmlBtn('place-nav', p.id, 'Googleマップ') +
+      htmlBtn('place-route', p.id, 'ルート作成') +
+      htmlBtn('place-park', p.id, '乗降・駐車') +
+      htmlBtn('place-edit', p.id, '車寄せメモ編集') +
+      '</div></div>';
+  }).join('') || '<p class="muted">該当なし。データ管理から施設JSONを読み込めます。</p>';
+}
+function addPlace() {
+  if (!v('pn')) return alert('施設名を入力');
+  db.places.unshift({id: nid('p'), name: v('pn'), address: v('pa'), ward: '', memo: v('pm')});
+  if (persist()) {
+    ['pn', 'pa', 'pm'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+    render();
+    refreshTodayPlaces();
+  }
+}
+function navPlace(id) {
+  var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
+  if (p) maps(placeLabel(p) || p.name);
+}
+function makeRoute(id) {
+  var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
+  if (!p) return;
+  clearRouteForm();
+  tab('routes');
+  if ($('rt')) $('rt').value = placeLabel(p) || p.name;
+  if ($('rn')) $('rn').value = p.name + 'へのルート';
+}
+function editPlace(id) {
+  var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
+  if (!p) return;
+  var x = prompt('車寄せ・進入方向・注意点', p.memo || '');
+  if (x !== null) { p.memo = x; persist(); render(); }
+}
+function parkingForPlace(id) {
+  var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
+  if (!p) return;
+  tab('parking');
+  if ($('parkPlace')) $('parkPlace').value = p.name;
+  if ($('parkAddress')) $('parkAddress').value = placeAddress(p);
+  renderParking();
+}
+function setRouteSaveLabel() {
+  var b = $('routeSave');
+  if (b) b.textContent = editingRouteId ? 'ルートを更新' : 'ルートを保存';
+}
+function renderDraftPoints() {
+  var box = $('draftPoints');
+  if (!box) return;
+  if (!draftPoints.length) {
+    box.innerHTML = '<p class="muted">通過地点はまだありません。上から順に追加してください。</p>';
+    return;
+  }
+  box.innerHTML = draftPoints.map(function (p, i) {
+    return '<div class="item"><b>' + (i + 1) + '. ' + esc(p.place) + '</b><p class="muted">' + esc(p.turn) + ' / ' + esc(priorityLabel(p.priority)) + '</p><div class="buttons">' +
+      htmlBtn('point-up', i, '上へ') +
+      htmlBtn('point-down', i, '下へ') +
+      htmlBtn('point-del', i, '削除') +
+      '</div></div>';
+  }).join('');
+}
+function renderDraftAvoids() {
+  var box = $('draftAvoids');
+  if (!box) return;
+  if (!draftAvoids.length) {
+    box.innerHTML = '<p class="muted">避けたい道路はまだありません。</p>';
+    return;
+  }
+  box.innerHTML = draftAvoids.map(function (a, i) {
+    return '<div class="item"><b>' + esc(a.road) + '</b><p class="muted">' + esc(a.reason) + '</p><div class="buttons">' +
+      htmlBtn('avoid-del', i, '削除') +
+      '</div></div>';
+  }).join('');
+}
+function addDraftPoint() {
+  var place = v('rp');
+  if (!place) return alert('地点名を入力');
+  draftPoints.push({place: place, turn: normalizeTurn(v('rpTurn')), priority: normalizePriority(v('rpPriority'))});
+  if ($('rp')) $('rp').value = '';
+  renderDraftPoints();
+}
+function addDraftLines() {
+  var lines = v('rv').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+  if (!lines.length) return alert('地点を1行ずつ入力');
+  lines.forEach(function (place) {
+    draftPoints.push({place: place, turn: '通過', priority: 'prefer'});
+  });
+  if ($('rv')) $('rv').value = '';
+  renderDraftPoints();
+}
+function absorbDraftLines() {
+  var lines = v('rv').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+  lines.forEach(function (place) {
+    draftPoints.push({place: place, turn: '通過', priority: 'prefer'});
+  });
+  if ($('rv')) $('rv').value = '';
+}
+function addDraftAvoid() {
+  var road = v('raRoad');
+  var reason = v('raReason');
+  if (!road || !reason) return alert('避けたい道路と理由を入力');
+  draftAvoids.push({road: road, reason: reason});
+  if ($('raRoad')) $('raRoad').value = '';
+  if ($('raReason')) $('raReason').value = '';
+  renderDraftAvoids();
+}
+function moveDraftPoint(index, dir) {
+  var i = Number(index);
+  var j = i + dir;
+  if (!isFinite(i) || j < 0 || j >= draftPoints.length) return;
+  var tmp = draftPoints[i];
+  draftPoints[i] = draftPoints[j];
+  draftPoints[j] = tmp;
+  renderDraftPoints();
+}
+function removeDraftPoint(index) {
+  var i = Number(index);
+  if (!isFinite(i) || i < 0 || i >= draftPoints.length) return;
+  draftPoints.splice(i, 1);
+  renderDraftPoints();
+}
+function removeDraftAvoid(index) {
+  var i = Number(index);
+  if (!isFinite(i) || i < 0 || i >= draftAvoids.length) return;
+  draftAvoids.splice(i, 1);
+  renderDraftAvoids();
+}
+function clearRouteForm() {
+  editingRouteId = '';
+  draftPoints = [];
+  draftAvoids = [];
+  ['rn', 'rf', 'rt', 'rv', 'rm', 'rp', 'raRoad', 'raReason'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+  if ($('rpTurn')) $('rpTurn').value = '通過';
+  if ($('rpPriority')) $('rpPriority').value = 'prefer';
+  if ($('rh')) $('rh').value = 'いつでも';
+  setRouteSaveLabel();
+  renderDraftPoints();
+  renderDraftAvoids();
+}
+function routeDetailHtml(r) {
+  var pts = pointsFromRoute(r);
+  var lines = pts.map(function (p, i) {
+    return esc((i + 1) + '. ' + p.place + '（' + p.turn + '・' + priorityLabel(p.priority) + '）');
+  }).join('<br>');
+  var avoids = (Array.isArray(r.avoids) ? r.avoids : []).map(function (a) {
+    return esc(a.road + (a.reason ? '（' + a.reason + '）' : ''));
+  }).join('<br>');
+  var limit = pts.length > MAP_WAYPOINTS ? '<br>Googleマップには先頭' + MAP_WAYPOINTS + '地点のみ渡します。右左折と必須道路は強制できません。' : '';
+  return esc(r.from) + ' → ' + esc(r.to) + ' / ' + esc(r.time) +
+    '<br>通過順：' + (lines || '指定なし') +
+    (avoids ? '<br>避けたい道路：<br>' + avoids : '') +
+    (r.memo ? '<br>' + esc(r.memo) : '') + limit;
+}
+function addRoute() {
+  if (!v('rn') || !v('rf') || !v('rt')) return alert('ルート名・出発地・目的地を入力');
+  absorbDraftLines();
+  var points = draftPoints.map(normalizePoint).filter(Boolean);
+  var avoids = draftAvoids.map(normalizeAvoid).filter(Boolean);
+  var route = {
+    id: editingRouteId || nid('r'),
+    name: v('rn'),
+    from: v('rf'),
+    to: v('rt'),
+    time: v('rh'),
+    memo: v('rm'),
+    points: points,
+    avoids: avoids,
+    via: points.map(function (p) { return p.place; })
+  };
+  if (editingRouteId) {
+    var idx = -1;
+    for (var i = 0; i < db.routes.length; i++) {
+      if (db.routes[i] && String(db.routes[i].id) === String(editingRouteId)) idx = i;
+    }
+    if (idx >= 0) db.routes[idx] = route;
+    else db.routes.unshift(route);
+  } else db.routes.unshift(route);
+  if (persist()) {
+    clearRouteForm();
+    renderRoutes();
+  }
+}
+function renderRoutes() {
+  var box = $('routesList');
+  if (!box) return;
+  var routes = Array.isArray(db.routes) ? db.routes : [];
+  box.innerHTML = routes.map(function (r) {
+    return '<div class="item"><b>' + esc(r.name) + '</b><p class="muted">' + routeDetailHtml(r) + '</p><div class="buttons">' +
+      htmlBtn('route-nav', r.id, 'Googleマップ') +
+      htmlBtn('route-edit', r.id, '編集') +
+      htmlBtn('route-del', r.id, '削除') +
+      '</div></div>';
+  }).join('') || '<p class="muted">ルートはまだありません。</p>';
+}
+function navRoute(id) {
+  var r = db.routes.find(function (item) { return item && String(item.id) === String(id); });
+  if (!r) return;
+  var via = pointsFromRoute(r).map(function (p) { return p.place; });
+  if (via.length > MAP_WAYPOINTS) alert('経由地は先頭' + MAP_WAYPOINTS + '件のみGoogleマップに渡します。右左折や必須道路は地図側では強制されません。');
+  maps(r.to, r.from, via);
+}
+function editRoute(id) {
+  var r = db.routes.find(function (item) { return item && String(item.id) === String(id); });
+  if (!r) return;
+  editingRouteId = String(r.id);
+  if ($('rn')) $('rn').value = r.name || '';
+  if ($('rf')) $('rf').value = r.from || '';
+  if ($('rt')) $('rt').value = r.to || '';
+  if ($('rh')) $('rh').value = r.time || 'いつでも';
+  if ($('rm')) $('rm').value = r.memo || '';
+  if ($('rv')) $('rv').value = '';
+  if ($('rp')) $('rp').value = '';
+  draftPoints = pointsFromRoute(r).map(function (p) { return {place: p.place, turn: p.turn, priority: p.priority}; });
+  draftAvoids = (Array.isArray(r.avoids) ? r.avoids : []).map(function (a) { return {road: a.road, reason: a.reason}; });
+  renderDraftPoints();
+  renderDraftAvoids();
+  setRouteSaveLabel();
+  tab('routes');
+  var form = $('routeEditor');
+  if (form && form.scrollIntoView) {
+    try { form.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch (e) { form.scrollIntoView(); }
+  }
+}
+function delRoute(id) {
+  if (!confirm('このルートを削除しますか？')) return;
+  db.routes = db.routes.filter(function (x) { return x && String(x.id) !== String(id); });
+  persist();
+  renderRoutes();
+}
+function applyImportedData(o) {
+  if (!o || typeof o !== 'object') throw new Error('JSONの形式が正しくありません');
+  if (Array.isArray(o.routes) && Array.isArray(o.places)) {
+    var placeCount = o.places.length;
+    var routeCount = o.routes.length;
+    var hasNow = db.places.length || db.routes.length || db.rules.length || (Array.isArray(db.parking) && db.parking.length);
+    if (!placeCount && !routeCount && hasNow) {
+      alert('中身が空のファイルでは、今のデータを置き換えません');
+      return false;
+    }
+    if (!confirm('今のデータを置き換えます。施設' + db.places.length + '件・ルート' + db.routes.length + '件が、ファイルの施設' + placeCount + '件・ルート' + routeCount + '件になります。先にバックアップしてください。置き換えますか？')) return false;
+    db = {
+      places: o.places.map(normalizePlace).filter(Boolean),
+      routes: o.routes.map(normalizeRoute).filter(Boolean),
+      rules: Array.isArray(o.rules) ? o.rules.map(normalizeRule).filter(Boolean) : db.rules,
+      parking: Array.isArray(o.parking) ? o.parking.map(normalizeParking).filter(Boolean) : db.parking,
+      origin: typeof o.origin === 'string' ? o.origin : (db.origin || '')
+    };
+  } else {
+    var arr = Array.isArray(o) ? o : o.places;
+    if (!Array.isArray(arr)) throw new Error('placesがありません');
+    var keys = {};
+    db.places.forEach(function (x) { keys[x.name + '|' + x.address] = true; });
+    arr.forEach(function (p) {
+      if (!p || !p.name) return;
+      var name = String(p.name);
+      var address = String(p.address || '');
+      var k = name + '|' + address;
+      if (keys[k]) return;
+      keys[k] = true;
+      db.places.push({
+        id: 'i' + Date.now() + '_' + db.places.length,
+        name: name,
+        address: address,
+        ward: String(p.ward || ''),
+        memo: ''
+      });
+    });
+  }
+  return true;
+}
+function readFileText(file) {
+  if (file && typeof file.text === 'function') return file.text();
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function () { resolve(String(reader.result || '')); };
+    reader.onerror = function () { reject(new Error('ファイルを読めません')); };
+    reader.readAsText(file);
+  });
+}
+function refreshAllViews() {
+  syncOriginFields();
+  render();
+  renderRoutes();
+  renderRules();
+  renderParking();
+  refreshTodayPlaces();
+}
+async function importFile() {
+  var input = $('file');
+  var f = input && input.files && input.files[0];
+  if (!f) return alert('JSONファイルを選択');
+  var snapshot = JSON.parse(JSON.stringify(db));
+  try {
+    var text = await readFileText(f);
+    var o = JSON.parse(String(text).replace(/^\uFEFF/, '').trim());
+    if (!applyImportedData(o)) return;
+    if (!persist()) {
+      db = snapshot;
+      refreshAllViews();
+      alert('保存に失敗したため、取り込み前のデータに戻しました');
+      setState('エラー：保存に失敗しました。既存データは残しています');
+      return;
+    }
+    refreshAllViews();
+    alert('取り込み完了：' + db.places.length + '施設');
+  } catch (e) {
+    db = snapshot;
+    refreshAllViews();
+    alert('取り込みエラー：' + (e && e.message ? e.message : '不明'));
+    setState('エラー：' + (e && e.message ? e.message : '取り込みに失敗しました') + '。既存データは残しています');
+  } finally {
+    if (input) input.value = '';
+  }
+}
+function backupJson() {
+  return JSON.stringify(db, null, 2);
+}
+function showBackupText(json) {
+  var box = $('backupText');
+  if (!box) return;
+  box.value = json;
+  box.classList.remove('hidden');
+}
+function backup() {
+  var json;
+  try { json = backupJson(); }
+  catch (e) { alert('書き出しエラー：' + e.message); return; }
+  try {
+    var blob = new Blob([json], {type: 'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'POLI_ROUTE_backup.json';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    if (a.parentNode) a.parentNode.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  } catch (e) {
+    alert('ファイル保存を開始できませんでした。表示されたJSONを長押ししてコピーしてください');
+  }
+  showBackupText(json);
+  var msg = $('backupMsg');
+  if (msg) msg.textContent = '端末への保存を開始しました。始まらない場合は「JSONをコピー」を使うか、下のテキストを長押ししてコピーしてください。';
+  setState('バックアップを作成しました（端末内）');
+}
+function copyBackup() {
+  var json;
+  try { json = backupJson(); }
+  catch (e) { alert('書き出しエラー：' + e.message); return; }
+  showBackupText(json);
+  var box = $('backupText');
+  if (box) {
+    box.focus();
+    box.select();
+    try { box.setSelectionRange(0, box.value.length); } catch (e) {}
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(json).then(function () {
+      alert('JSONをコピーしました。メモなどに貼り付けて保存してください');
+    }).catch(function () {
+      alert('自動コピーは使えません。表示されたJSONを長押ししてコピーしてください');
+    });
+    return;
+  }
+  alert('表示されたJSONを長押ししてコピーしてください');
+}
+function loadStored() {
+  var raw = null;
+  try { raw = localStorage.getItem(STORAGE_KEY); }
+  catch (e) {
+    setState('起動OK・保存制限あり（Safariで開いてください）');
+    return;
+  }
+  if (!raw) return;
+  try {
+    var x = JSON.parse(raw);
+    if (x && Array.isArray(x.places) && Array.isArray(x.routes)) {
+      db = {
+        places: x.places.map(normalizePlace).filter(Boolean),
+        routes: x.routes.map(normalizeRoute).filter(Boolean),
+        rules: Array.isArray(x.rules) ? x.rules.map(normalizeRule).filter(Boolean) : [],
+        parking: Array.isArray(x.parking) ? x.parking.map(normalizeParking).filter(Boolean) : [],
+        origin: typeof x.origin === 'string' ? x.origin : ''
+      };
+    }
+  } catch (e) {
+    setState('起動OK・保存データを読めないため空の状態で開始します');
+  }
+}
+function syncOriginFields() {
+  var value = db.origin || '';
+  if ($('origin')) $('origin').value = value;
+  if ($('todayOrigin')) $('todayOrigin').value = value;
+}
+function bindOrigin(id) {
+  var el = $(id);
+  if (!el || el.getAttribute('data-origin-bound')) return;
+  el.setAttribute('data-origin-bound', '1');
+  el.addEventListener('change', function () {
+    db.origin = el.value.trim();
+    syncOriginFields();
+    persist();
+  });
+}
+function bindSuggest(inputId, boxId) {
+  var input = $(inputId);
+  var box = $(boxId);
+  if (!input || !box || input.getAttribute('data-suggest-bound')) return;
+  input.setAttribute('data-suggest-bound', '1');
+  input.removeAttribute('list');
+  var hide = function () {
+    box.classList.add('hidden');
+    clearNode(box);
+  };
+  var show = function () {
+    var q = input.value.trim().toLowerCase();
+    clearNode(box);
+    if (!q) { box.classList.add('hidden'); return; }
+    var hits = (Array.isArray(db.places) ? db.places : []).filter(function (p) {
+      return [p && p.name, p && p.ward, p && p.address].join(' ').toLowerCase().includes(q);
+    }).slice(0, 8);
+    if (!hits.length) { box.classList.add('hidden'); return; }
+    hits.forEach(function (p) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      var label = placeLabel(p);
+      b.textContent = asText(p.name) + (label ? ' / ' + label : '');
+      var choose = function (event) {
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        input.value = asText(p.name);
+        if (inputId === 'parkPlace') {
+          var addr = $('parkAddress');
+          if (addr && !addr.value.trim()) addr.value = placeAddress(p);
+        }
+        hide();
+      };
+      b.addEventListener('pointerdown', choose);
+      b.addEventListener('click', choose);
+      box.appendChild(b);
+    });
+    box.classList.remove('hidden');
+  };
+  input.addEventListener('input', show);
+  input.addEventListener('blur', function () { setTimeout(hide, 400); });
+}
+function onActionClick(e) {
+  var node = e.target;
+  if (node && node.nodeType === 3) node = node.parentElement;
+  var b = node && node.closest ? node.closest('button[data-act]') : null;
+  if (!b) return;
+  var act = b.getAttribute('data-act');
+  var id = b.getAttribute('data-id');
+  try {
+    if (act === 'place-nav') navPlace(id);
+    else if (act === 'place-route') makeRoute(id);
+    else if (act === 'place-park') parkingForPlace(id);
+    else if (act === 'place-edit') editPlace(id);
+    else if (act === 'route-nav') navRoute(id);
+    else if (act === 'route-edit') editRoute(id);
+    else if (act === 'route-del') delRoute(id);
+    else if (act === 'point-up') moveDraftPoint(id, -1);
+    else if (act === 'point-down') moveDraftPoint(id, 1);
+    else if (act === 'point-del') removeDraftPoint(id);
+    else if (act === 'avoid-del') removeDraftAvoid(id);
+    else if (act === 'rule-edit') editRule(id);
+    else if (act === 'rule-del') deleteRule(id);
+    else if (act === 'park-nav') openParking(id);
+    else if (act === 'park-edit') editParking(id);
+    else if (act === 'park-del') deleteParking(id);
+  } catch (err) {
+    alert('操作に失敗：' + (err && err.message ? err.message : '不明'));
+    setState('エラー：' + (err && err.message ? err.message : '操作に失敗しました'));
+  }
+}
+function bindStatic() {
+  if (document.body.getAttribute('data-poli-bound')) return;
+  document.body.setAttribute('data-poli-bound', '1');
+  document.addEventListener('click', onActionClick);
+  bindOrigin('origin');
+  bindOrigin('todayOrigin');
+  bindSuggest('todayDest', 'todaySuggest');
+  bindSuggest('destination', 'destSuggest');
+  bindSuggest('parkPlace', 'parkSuggest');
+  bindSuggest('rp', 'rpSuggest');
+  var fields = document.querySelectorAll('input[type="text"], textarea, input:not([type])');
+  for (var i = 0; i < fields.length; i++) {
+    fields[i].setAttribute('autocorrect', 'off');
+    fields[i].setAttribute('autocapitalize', 'off');
+    fields[i].setAttribute('spellcheck', 'false');
+  }
+}
+function addRule() {
+  if (!v('rulePoint')) return alert('道路・交差点を入力');
+  db.rules.push({
+    id: nid('rule'),
+    area: v('ruleArea') || '全方面',
+    point: v('rulePoint'),
+    level: v('ruleLevel'),
+    turn: v('ruleTurn'),
+    time: v('ruleTime'),
+    memo: v('ruleMemo')
+  });
+  if (persist()) {
+    ['ruleArea', 'rulePoint', 'ruleMemo'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+    renderRules();
+  }
+}
+function renderRules() {
+  var box = $('rulesList');
+  if (!box) return;
+  var rules = Array.isArray(db.rules) ? db.rules : [];
+  box.innerHTML = rules.map(function (r) {
+    return '<div class="item"><b>' + esc(r.point) + '</b> ' + esc(r.turn) +
+      '<p class="muted">' + esc(r.area) + ' / ' + esc(levelLabel(r.level)) + ' / ' + esc(r.time) + '<br>' + esc(r.memo) + '</p>' +
+      htmlBtn('rule-edit', r.id, '編集') + ' ' + htmlBtn('rule-del', r.id, '削除') + '</div>';
+  }).join('') || '<p class="muted">ルールはまだありません。</p>';
+}
+function editRule(id) {
+  var r = db.rules.find(function (item) { return item && String(item.id) === String(id); });
+  if (!r) return;
+  var p = prompt('道路・交差点', r.point);
+  if (p === null) return;
+  var m = prompt('理由・注意点', r.memo);
+  if (m === null) return;
+  r.point = p;
+  r.memo = m;
+  persist();
+  renderRules();
+}
+function deleteRule(id) {
+  if (!confirm('削除しますか？')) return;
+  db.rules = db.rules.filter(function (x) { return x && String(x.id) !== String(id); });
+  persist();
+  renderRules();
+}
+function calculateDeparture() {
+  var d = v('arrivalDate');
+  var t = v('arrivalTime');
+  var mins = Number(v('driveMinutes'));
+  var buffer = Number(v('bufferMinutes'));
+  if (!d || !t || !isFinite(mins) || mins <= 0) return alert('到着日時と予測走行時間を入力');
+  var dt = parseLocalDateTime(d, t);
+  if (!dt) return alert('日時が不正です');
+  dt.setMinutes(dt.getMinutes() - mins - buffer);
+  var box = $('departureResult');
+  if (!box) return;
+  box.innerHTML = '<b style="font-size:24px;color:#a8d8ff">' + formatDeparture(dt) + ' 出発</b><p>走行' + mins + '分 ＋ 余裕' + buffer + '分</p><p>※交通予測ではなく手入力に基づく試算。必須ルートの実走行時間は未検証。</p>';
+}
+function plannerMap() {
+  if (!v('destination')) return alert('目的地を入力してください');
+  maps(v('destination'), v('origin'));
+}
+function parkingArray() {
+  if (!Array.isArray(db.parking)) db.parking = [];
+  return db.parking;
+}
+function validPrice(price) {
+  return price === '' || /^\d+$/.test(price);
+}
+function saveParking() {
+  var place = v('parkPlace');
+  var name = v('parkName');
+  var drop = v('dropoff');
+  var price = v('parkPrice');
+  if (!place) return alert('施設名を入力してください');
+  if (!name && !drop) return alert('乗降メモまたは駐車場名を入力してください');
+  if (!validPrice(price)) return alert('料金は0以上の整数にしてください');
+  parkingArray().unshift({
+    id: nid('pk'),
+    place: place,
+    address: v('parkAddress'),
+    dropoff: drop,
+    status: v('dropStatus'),
+    name: name,
+    location: v('parkLocation'),
+    mode: v('parkMode'),
+    price: price,
+    duration: v('parkDuration'),
+    checked: v('parkChecked'),
+    memo: v('parkMemo')
+  });
+  if (persist()) {
+    ['parkPlace', 'parkAddress', 'dropoff', 'parkName', 'parkLocation', 'parkPrice', 'parkMemo'].forEach(function (k) {
+      if ($(k)) $(k).value = '';
+    });
+    renderParking();
+    alert('保存しました');
+  }
+}
+function renderParking() {
+  var box = $('parkingList');
+  if (!box) return;
+  var q = v('parkSearch').toLowerCase();
+  var rows = parkingArray().filter(function (p) {
+    return [p.place, p.name, p.address, p.location].join(' ').toLowerCase().includes(q);
+  });
+  box.innerHTML = rows.map(function (p) {
+    var price = (p.price !== '' && p.price != null) ? (esc(p.price) + '円 / ' + esc(p.duration || '?') + '分') : '未登録';
+    return '<div class="item"><b>' + esc(p.place) + '</b><p class="muted">乗降：' + esc(p.dropoff || '未登録') + '（' + esc(p.status) + '）<br>駐車：' +
+      esc(p.name || '未登録') + ' / ' + esc(modeLabel(p.mode)) + '<br>' + esc(p.location) + '<br>参考料金：' + price +
+      '　確認日：' + esc(p.checked || '不明') + '<br>' + esc(p.memo) + '</p><div class="buttons">' +
+      htmlBtn('park-nav', p.id, '駐車場へナビ') +
+      htmlBtn('park-edit', p.id, '編集') +
+      htmlBtn('park-del', p.id, '削除') +
+      '</div></div>';
+  }).join('') || '<p class="muted">まだ登録がありません。</p>';
+}
+function openParking(id) {
+  var p = parkingArray().find(function (x) { return x && String(x.id) === String(id); });
+  if (p) maps(p.location || p.address || p.place);
+}
+function editParking(id) {
+  var p = parkingArray().find(function (x) { return x && String(x.id) === String(id); });
+  if (!p) return;
+  var drop = prompt('安全な乗降位置・徒歩案内', p.dropoff || '');
+  if (drop === null) return;
+  var memo = prompt('駐車場の注意点', p.memo || '');
+  if (memo === null) return;
+  var price = prompt('参考料金（円・空欄可）', p.price || '');
+  if (price === null) return;
+  if (price !== '' && !/^\d+$/.test(price)) return alert('料金は0以上の整数にしてください');
+  p.dropoff = drop;
+  p.memo = memo;
+  p.price = price;
+  persist();
+  renderParking();
+}
+function deleteParking(id) {
+  if (!confirm('この記録を削除しますか？')) return;
+  db.parking = parkingArray().filter(function (x) { return x && String(x.id) !== String(id); });
+  persist();
+  renderParking();
+}
+function findPlace(q) {
+  var query = String(q || '').trim().toLowerCase();
+  if (!query) return null;
+  var places = Array.isArray(db.places) ? db.places : [];
+  return places.find(function (p) {
+    return asText(p && p.name).toLowerCase() === query || asText(p && p.address).toLowerCase() === query;
+  }) || places.find(function (p) {
+    return asText(p && p.name).toLowerCase().includes(query);
+  }) || null;
+}
+function todayMatches() {
+  var q = v('todayDest').toLowerCase();
+  if (!q) return {place: null, routes: [], parking: [], rules: []};
+  var place = findPlace(q);
+  var terms = [q];
+  if (place) {
+    if (place.name) terms.push(asText(place.name).toLowerCase());
+    if (place.address) terms.push(asText(place.address).toLowerCase());
+  }
+  var match = function (s) {
+    var hay = asText(s).toLowerCase();
+    return terms.some(function (t) { return t && hay.includes(t); });
+  };
+  return {
+    place: place,
+    routes: (Array.isArray(db.routes) ? db.routes : []).filter(function (r) { return match(r && r.to) || match(r && r.name); }),
+    parking: parkingArray().filter(function (p) { return match(p && p.place) || match(p && p.address); }),
+    rules: (Array.isArray(db.rules) ? db.rules : []).filter(function (r) { return asText(r && r.area) === '全方面' || match(r && r.area); })
+  };
+}
+function refreshTodayPlaces() {
+  var list = $('placeSuggestions');
+  if (!list) return;
+  clearNode(list);
+  (Array.isArray(db.places) ? db.places : []).slice(0, 500).forEach(function (p) {
+    if (!p || !p.name) return;
+    var o = document.createElement('option');
+    o.value = p.name;
+    list.appendChild(o);
+  });
+}
+function todayMap() {
+  var d = v('todayDest');
+  if (!d) return alert('目的地を入力してください');
+  var m = todayMatches();
+  var to = m.place ? (placeLabel(m.place) || m.place.name) : d;
+  maps(to, v('todayOrigin'));
+}
+function addBlock(root, tag, txt, cls) {
+  var el = document.createElement(tag);
+  el.textContent = txt;
+  if (cls) el.className = cls;
+  if (tag === 'button') el.type = 'button';
+  root.appendChild(el);
+  return el;
+}
+function timeBand(timeStr) {
+  var tm = /^(\d{2}):(\d{2})/.exec(String(timeStr || '').trim());
+  if (!tm) return '';
+  var h = Number(tm[1]);
+  if (h >= 5 && h < 11) return '朝';
+  if (h >= 11 && h < 16) return '昼';
+  if (h >= 16 && h < 19) return '夕方';
+  return '夜';
+}
+function savedBandOk(saved, band) {
+  var t = asText(saved).trim();
+  if (!t || t === 'いつでも') return true;
+  return !!band && t === band;
+}
+function textHit(hay, needle) {
+  var h = asText(hay).toLowerCase().replace(/\s+/g, '');
+  var n = asText(needle).toLowerCase().replace(/\s+/g, '');
+  if (!h || !n) return false;
+  return h.indexOf(n) !== -1 || n.indexOf(h) !== -1;
+}
+function termHit(s, terms) {
+  var hay = asText(s).toLowerCase();
+  return terms.some(function (t) { return t && hay.indexOf(t) !== -1; });
+}
+function routeHasPlace(route, pointName) {
+  var name = asText(pointName).trim();
+  if (!name) return false;
+  return pointsFromRoute(route).some(function (p) { return textHit(p.place, name); });
+}
+function missingMustRules(route, rules) {
+  return rules.filter(function (rule) {
+    return asText(rule && rule.point).trim() && !routeHasPlace(route, rule.point);
+  });
+}
+function joinLabels(list) {
+  return list.filter(Boolean).join('、');
+}
+function priceLine(p) {
+  var price = asText(p && p.price).trim();
+  var dur = asText(p && p.duration).trim();
+  var checked = asText(p && p.checked).trim();
+  var fee = /^\d+$/.test(price) ? price + '円' : '未登録';
+  var span = /^\d+$/.test(dur) ? dur + '分' : '未登録';
+  return '参考料金：' + fee + ' / 対象時間：' + span + ' / 確認日：' + (checked || '未登録');
+}
+function addTimeGrid(root, depart, arrive, buffer) {
+  var grid = document.createElement('div');
+  grid.className = 'times';
+  [['出発', depart], ['到着', arrive], ['余裕', buffer]].forEach(function (pair) {
+    var cell = document.createElement('div');
+    var label = document.createElement('span');
+    label.textContent = pair[0];
+    var val = document.createElement('b');
+    val.textContent = pair[1];
+    cell.appendChild(label);
+    cell.appendChild(val);
+    grid.appendChild(cell);
+  });
+  root.appendChild(grid);
+}
+function addSteps(parent, points) {
+  if (!points.length) {
+    addBlock(parent, 'p', '交差点指示：未登録', 'muted');
+    return;
+  }
+  var ol = document.createElement('ol');
+  points.forEach(function (p) {
+    var li = document.createElement('li');
+    li.textContent = p.place + '　' + (p.turn || '通過') + '（' + priorityLabel(p.priority) + '）';
+    ol.appendChild(li);
+  });
+  parent.appendChild(ol);
+}
+function buildToday() {
+  var destQuery = v('todayDest');
+  var d = v('todayDate');
+  var t = v('todayTime');
+  if (!destQuery || !d || !t) return alert('目的地と到着日時を入力してください');
+  var arriveAt = parseLocalDateTime(d, t);
+  if (!arriveAt) return alert('日時が正しくありません');
+  var driveRaw = v('todayDrive');
+  var drive = driveRaw === '' ? NaN : Number(driveRaw);
+  var driveOk = isFinite(drive) && drive > 0 && drive <= 1440;
+  var buffer = Number(v('todayBuffer'));
+  if (!isFinite(buffer) || buffer < 0) buffer = 0;
+  var departText = '未登録';
+  if (driveOk) {
+    var departAt = new Date(arriveAt.getTime());
+    departAt.setMinutes(departAt.getMinutes() - drive - buffer);
+    departText = pad2(departAt.getHours()) + ':' + pad2(departAt.getMinutes());
+  }
+  var arriveText = pad2(arriveAt.getHours()) + ':' + pad2(arriveAt.getMinutes());
+  var band = timeBand(t);
+  var origin = v('todayOrigin');
+  var m = todayMatches();
+  var place = m.place;
+  var ward = place ? asText(place.ward).trim() : '';
+  var terms = [destQuery.trim().toLowerCase()];
+  if (place) {
+    ['name', 'address', 'ward'].forEach(function (k) {
+      var term = asText(place[k]).trim().toLowerCase();
+      if (term && terms.indexOf(term) === -1) terms.push(term);
+    });
+  }
+  var areaRules = (Array.isArray(db.rules) ? db.rules : []).filter(function (rule) {
+    var area = asText(rule && rule.area).trim();
+    if (!area) return false;
+    if (area === '全方面') return true;
+    if (ward && textHit(area, ward)) return true;
+    return termHit(area, terms);
+  });
+  var activeRules = areaRules.filter(function (rule) { return savedBandOk(rule.time, band); });
+  var mustRules = activeRules.filter(function (rule) { return rule.level === 'must' && asText(rule.point).trim(); });
+  var preferRules = activeRules.filter(function (rule) { return rule.level === 'prefer' && asText(rule.point).trim(); });
+  var avoidRules = activeRules.filter(function (rule) { return rule.level === 'avoid' && asText(rule.point).trim(); });
+  var areas = [];
+  if (ward) areas.push(ward);
+  areaRules.forEach(function (rule) {
+    var area = asText(rule.area).trim();
+    if (area && area !== '全方面' && areas.indexOf(area) === -1) areas.push(area);
+  });
+  var candidates = [];
+  var excluded = [];
+  m.routes.forEach(function (route) {
+    var from = asText(route.from).trim();
+    var routeTime = asText(route.time).trim();
+    if (origin && from && !textHit(from, origin)) {
+      excluded.push({route: route, reason: '出発地が違う'});
+      return;
+    }
+    if (!savedBandOk(routeTime, band)) {
+      excluded.push({route: route, reason: '時間帯が違う（記録：' + routeTime + '）'});
+      return;
+    }
+    candidates.push(route);
+  });
+  candidates.sort(function (a, b) {
+    var gap = missingMustRules(a, mustRules).length - missingMustRules(b, mustRules).length;
+    if (gap) return gap;
+    var ae = asText(a.time).trim() === band ? 0 : 1;
+    var be = asText(b.time).trim() === band ? 0 : 1;
+    return ae - be;
+  });
+  var mapDest = place && asText(place.address).trim() ? placeLabel(place) : (place && asText(place.name).trim() ? place.name : destQuery);
+  var root = $('todayResult');
+  if (!root) return;
+  clearNode(root);
+  var nav = addBlock(root, 'button', 'Googleマップでナビ開始', 'primary navstart');
+  function openCandidate(route) {
+    var via = pointsFromRoute(route).map(function (p) { return p.place; });
+    if (via.length > MAP_WAYPOINTS) alert('経由地は先頭' + MAP_WAYPOINTS + '件のみGoogleマップに渡します。右左折や必須道路は地図側では強制されません。');
+    maps(mapDest || route.to, origin || route.from, via);
+  }
+  nav.onclick = function () {
+    if (candidates.length) openCandidate(candidates[0]);
+    else maps(mapDest, origin);
+  };
+  var navNote = candidates.length
+    ? 'ナビ開始は「' + (candidates[0].name || '先頭の候補') + '」の地点名を使います。経由地は先頭' + MAP_WAYPOINTS + '件だけです。'
+    : '保存ルートがないため、経由地なしで目的地だけ開きます。';
+  addBlock(root, 'p', navNote + '右折・左折・必須道路・回避道路はGoogleマップへ送りません。地図側では強制できません。', 'warn');
+  addTimeGrid(root, departText, arriveText, buffer + '分');
+  addBlock(root, 'p', '到着日 ' + d + ' / 時間帯 ' + (band || '未登録') + ' / 走行時間（手入力）：' + (driveOk ? drive + '分' : '未登録'), 'muted');
+  addBlock(root, 'p', '出発時刻は手入力の走行時間からの逆算です。交通予測ではありません。規制と一方通行は未確認で、安全は保証しません。', 'warn');
+  addBlock(root, 'h3', '目的地');
+  if (place) {
+    addBlock(root, 'p', asText(place.name) || destQuery);
+    addBlock(root, 'p', '住所：' + (asText(place.address).trim() || '未登録'), 'muted');
+    if (asText(place.memo).trim()) addBlock(root, 'p', '施設メモ：' + place.memo, 'muted');
+  } else {
+    addBlock(root, 'p', destQuery);
+    addBlock(root, 'p', '施設マスター：未登録', 'muted');
+    addBlock(root, 'p', '住所：未登録', 'muted');
+  }
+  addBlock(root, 'p', '方面：' + (areas.length ? areas.join('、') : '未登録'), 'muted');
+  addBlock(root, 'p', '出発地：' + (origin || '未登録'), 'muted');
+  var dropoffs = m.parking.filter(function (p) { return asText(p.dropoff).trim() && asText(p.status) !== '利用不可'; });
+  var blockedDropoffs = m.parking.filter(function (p) { return asText(p.dropoff).trim() && asText(p.status) === '利用不可'; });
+  addBlock(root, 'h3', '乗降場所');
+  if (!dropoffs.length) addBlock(root, 'p', '未登録', 'muted');
+  dropoffs.forEach(function (p) {
+    addBlock(root, 'p', p.dropoff + '（' + (asText(p.status).trim() || '確認状況：未登録') + '）', 'line');
+  });
+  blockedDropoffs.forEach(function (p) {
+    addBlock(root, 'p', '利用不可の記録：' + p.dropoff, 'warn');
+  });
+  addBlock(root, 'h3', candidates.length > 1 ? 'ルート候補の比較' : 'ルート');
+  if (candidates.length > 1) addBlock(root, 'p', '複数あるため、必須地点・優先・回避を並べています。自動では1本に決めません。', 'muted');
+  if (!candidates.length) addBlock(root, 'p', '未登録', 'muted');
+  candidates.forEach(function (route) {
+    var card = document.createElement('div');
+    card.className = 'plan-card';
+    root.appendChild(card);
+    var points = pointsFromRoute(route);
+    var mustPts = points.filter(function (p) { return p.priority === 'must'; }).map(function (p) { return p.place; });
+    var preferPts = points.filter(function (p) { return p.priority !== 'must'; }).map(function (p) { return p.place + '（' + p.turn + '）'; });
+    var avoids = (Array.isArray(route.avoids) ? route.avoids : []).map(function (a) {
+      return asText(a.road).trim() + (asText(a.reason).trim() ? '（' + a.reason + '）' : '');
+    }).filter(Boolean);
+    var avoidRoads = avoids.concat(avoidRules.map(function (rule) { return rule.point + '（ルール）'; }));
+    var preferRoads = preferRules.map(function (rule) { return rule.point; });
+    var missing = missingMustRules(route, mustRules);
+    var routeTime = asText(route.time).trim();
+    addBlock(card, 'p', (route.name || '名称未登録') + ' / ' + (routeTime || '時間帯：未登録'));
+    addBlock(card, 'p', '必須地点：' + (mustPts.length ? joinLabels(mustPts) : '未登録'), 'muted');
+    addBlock(card, 'p', '優先地点：' + (preferPts.length ? joinLabels(preferPts) : '未登録'), 'muted');
+    addBlock(card, 'p', '優先道路：' + (preferRoads.length ? joinLabels(preferRoads) : '未登録'), 'muted');
+    addBlock(card, 'p', '回避道路：' + (avoidRoads.length ? joinLabels(avoidRoads) : '未登録'), 'muted');
+    if (origin && !asText(route.from).trim()) addBlock(card, 'p', 'このルートの出発地は未登録です。', 'muted');
+    missing.forEach(function (rule) {
+      addBlock(card, 'p', '必須地点「' + rule.point + '」がこのルートの通過地点に入っていません。記録の不足であり、規制の判定ではありません。', 'warn');
+    });
+    if (asText(route.memo).trim()) addBlock(card, 'p', '選ぶ理由：' + route.memo, 'muted');
+    addBlock(card, 'p', '交差点指示（記録した順）', 'muted');
+    addSteps(card, points);
+    addBlock(card, 'p', '右左折は記録です。Googleマップでは強制できません。現地の標識を優先してください。', 'warn');
+    var btn = addBlock(card, 'button', 'このルートでGoogleマップを開く');
+    btn.onclick = function () { openCandidate(route); };
+  });
+  function addParkingGroup(title, rows) {
+    addBlock(root, 'h3', title);
+    if (!rows.length) {
+      addBlock(root, 'p', '未登録', 'muted');
+      return;
+    }
+    rows.forEach(function (p) {
+      var card = document.createElement('div');
+      card.className = 'plan-card';
+      root.appendChild(card);
+      addBlock(card, 'p', asText(p.name).trim() || '駐車場名：未登録');
+      addBlock(card, 'p', '住所：' + (asText(p.location).trim() || asText(p.address).trim() || '未登録'), 'muted');
+      addBlock(card, 'p', priceLine(p), 'muted');
+      if (asText(p.memo).trim()) addBlock(card, 'p', p.memo, 'muted');
+      addBlock(card, 'p', '満空情報：未登録', 'muted');
+      if (asText(p.name).trim() || asText(p.location).trim()) {
+        var parkBtn = addBlock(card, 'button', '駐車場へナビ');
+        parkBtn.onclick = function () { openParking(p.id); };
+      }
+    });
+  }
+  var cheap = m.parking.filter(function (p) { return p.mode === 'cheap' || p.mode === 'both'; });
+  var fast = m.parking.filter(function (p) { return p.mode === 'fast' || p.mode === 'both'; });
+  var unknownMode = m.parking.filter(function (p) { return p.mode !== 'cheap' && p.mode !== 'fast' && p.mode !== 'both' && asText(p.name).trim(); });
+  addParkingGroup('駐車場・節約候補', cheap);
+  addParkingGroup('駐車場・急ぎ候補', fast);
+  if (unknownMode.length) {
+    addBlock(root, 'h3', '用途未登録の駐車場');
+    unknownMode.forEach(function (p) {
+      addBlock(root, 'p', p.name + ' / 節約か急ぎかは未登録', 'muted');
+    });
+  }
+  addBlock(root, 'h3', '運転ルール');
+  if (!activeRules.length) addBlock(root, 'p', '未登録', 'muted');
+  activeRules.slice(0, 12).forEach(function (rule) {
+    addBlock(root, 'p', levelLabel(rule.level) + '：' + (asText(rule.point).trim() || '未登録') + ' ' + asText(rule.turn) + '（' + (asText(rule.area).trim() || '方面：未登録') + ' / ' + (asText(rule.time).trim() || '時間帯：未登録') + '）', 'line');
+  });
+  if (excluded.length) {
+    addBlock(root, 'h3', '今回の条件では出していないルート');
+    excluded.forEach(function (item) {
+      addBlock(root, 'p', (item.route.name || '名称未登録') + '：' + item.reason, 'muted');
+    });
+  }
+  try { root.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch (e) { root.scrollIntoView(); }
+}
+function runDiagnostics() {
+  var checks = [];
+  checks.push(['JavaScript起動', true]);
+  checks.push(['施設検索画面', !!$('search') && !!$('list')]);
+  checks.push(['ルート登録画面', !!$('routesList')]);
+  checks.push(['出発逆算画面', !!$('departureResult')]);
+  checks.push(['乗降・駐車画面', !!$('parkingList')]);
+  var storage = false;
+  try {
+    var k = 'poli-route-test';
+    localStorage.setItem(k, 'ok');
+    storage = localStorage.getItem(k) === 'ok';
+    localStorage.removeItem(k);
+  } catch (e) {}
+  checks.push(['端末内保存', storage]);
+  var line = checks.map(function (x) { return (x[1] ? '✓ ' : '✗ ') + x[0]; }).join(' / ');
+  var box = $('diagnostics');
+  if (box) box.textContent = line;
+  return checks.every(function (x) { return x[1]; });
+}
+function initToday() {
+  var iso = localISODate(new Date());
+  if ($('todayDate')) $('todayDate').value = iso;
+  if ($('arrivalDate')) $('arrivalDate').value = iso;
+  syncOriginFields();
+  refreshTodayPlaces();
+  tab('today');
+}
+function boot() {
+  var st = $('state');
+  try {
+    loadStored();
+    bindStatic();
+    safeCall(render);
+    safeCall(renderRoutes);
+    safeCall(renderDraftPoints);
+    safeCall(renderDraftAvoids);
+    safeCall(renderRules);
+    safeCall(renderParking);
+    safeCall(initToday);
+    var diagOk = false;
+    try { diagOk = runDiagnostics(); }
+    catch (e) { diagOk = false; setState('エラー：' + (e && e.message ? e.message : '診断に失敗しました')); }
+    if (st) {
+      var text = st.textContent || '';
+      if (text.indexOf('エラー') === 0 || text.indexOf('保存') !== -1) {
+        /* 読み込み結果を残す */
+      } else if (!diagOk) st.textContent = '起動OK・保存制限あり（Safariで開いてください）';
+      else st.textContent = '起動OK（データは端末内）';
+    }
+  } catch (e) {
+    setState('エラー：' + (e && e.message ? e.message : '起動に失敗しました'));
+  } finally {
+    if (st) st.setAttribute('data-booted', '1');
+    registerAppCache();
+  }
+}
+function registerAppCache() {
+  if (!('serviceWorker' in navigator)) return;
+  if (location.protocol === 'file:') return;
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
+boot();
+</script>
+</body>
+</html>
