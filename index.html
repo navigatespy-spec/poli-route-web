@@ -69,13 +69,16 @@ label{font-size:12px;color:#93a8c2}
 @media (max-width:600px){
 .pair.when-narrow{grid-template-columns:minmax(0,1fr)}
 }
-#home .panel{padding:10px 12px}
+#home .panel{padding:8px 12px}
 #home h2{margin:0 0 6px}
-#home label{display:block;margin:10px 0 4px;line-height:1.3}
+#home label{display:block;margin:8px 0 4px;line-height:1.3}
 #home h2+label{margin-top:0}
-#home input,#home select{height:46px;min-height:44px;margin:0;padding:6px 12px;font-size:16px;line-height:1.25}
-#home input[type="date"],#home input[type="time"]{height:46px;min-height:44px;max-height:48px;padding-top:0;padding-bottom:0}
-#home .pair{gap:10px;margin-top:10px}
+#home input,#home select{box-sizing:border-box;-webkit-appearance:none;appearance:none;height:46px;min-height:46px;max-height:46px;margin:0;padding:0 12px;border-width:1px;font-size:16px;line-height:44px}
+#home select{padding-right:32px;background-color:#0c1a2d;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%2393a8c2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:12px 8px}
+#home input[type="date"],#home input[type="time"]{height:46px;min-height:46px;max-height:46px;padding:0 12px;line-height:44px}
+#home input[type="date"]::-webkit-datetime-edit,#home input[type="time"]::-webkit-datetime-edit{padding:0;line-height:44px;min-height:0}
+#home input[type="date"]::-webkit-calendar-picker-indicator,#home input[type="time"]::-webkit-calendar-picker-indicator{display:block;margin:0}
+#home .pair{gap:8px;margin-top:8px}
 #home .pair label{margin:0 0 4px}
 #home .suggest{margin:4px 0 0}
 #home .panel>button{min-height:48px;margin:10px 0 0}
