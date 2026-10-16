@@ -47,6 +47,8 @@ button.ghost{background:transparent;color:#b9cbe0;border:1px solid #345274}
 input,textarea,select{box-sizing:border-box;width:100%;padding:10px 12px;border-radius:10px;border:1px solid #345274;background:#0c1a2d;color:#fff;margin:2px 0 8px;font:inherit;font-size:16px;min-height:44px}
 textarea{min-height:72px}
 input[type="date"],input[type="time"],input[type="file"]{color-scheme:dark}
+input[type="date"],input[type="time"]{display:block;width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+input[type="date"]::-webkit-datetime-edit,input[type="time"]::-webkit-datetime-edit,input[type="date"]::-webkit-datetime-edit-fields-wrapper,input[type="time"]::-webkit-datetime-edit-fields-wrapper{min-width:0;max-width:100%;padding:0}
 .panel{background:#142033;border-radius:14px;padding:12px;margin:8px 0}
 .item{padding:10px 0;border-bottom:1px solid #2a3d56}
 .item:last-child{border-bottom:0}
@@ -56,9 +58,13 @@ input[type="date"],input[type="time"],input[type="file"]{color-scheme:dark}
 .buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .buttons button{font-size:13px;padding:8px 10px;min-height:44px}
 .panel>button{width:100%;margin:4px 0}
-.pair input,.pair select{min-width:0}
 label{font-size:12px;color:#93a8c2}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.pair>*{min-width:0;max-width:100%}
+.pair input,.pair select{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+@media (max-width:359px){
+.pair{grid-template-columns:minmax(0,1fr)}
+}
 #state{font-size:12px;color:#8fd9a8;margin:0}
 .suggest{background:#0c1a2d;border:1px solid #345274;border-radius:10px;margin:-4px 0 8px;max-height:200px;overflow:auto;-webkit-overflow-scrolling:touch}
 .suggest button{display:block;width:100%;text-align:left;background:#10233a;border-radius:0;margin:0}
