@@ -88,6 +88,7 @@ label{font-size:12px;color:#93a8c2}
 .suggest{background:#0c1a2d;border:1px solid #345274;border-radius:10px;margin:-4px 0 8px;max-height:200px;overflow:auto;-webkit-overflow-scrolling:touch}
 .suggest button{display:block;width:100%;text-align:left;background:#10233a;border-radius:0;margin:0}
 #diagnostics{word-break:break-word}
+#fieldMeasureText{min-height:220px;white-space:pre;overflow:auto}
 .chip{display:inline-block;font-size:12px;line-height:1.3;padding:2px 6px;border-radius:6px;margin-right:4px;vertical-align:1px}
 .chip.must{background:#3a2430;color:#ffb4a8}
 .chip.prefer{background:#16304c;color:#b7d7ff}
@@ -96,6 +97,7 @@ label{font-size:12px;color:#93a8c2}
 .chip.cheap{background:#163528;color:#b7e7c8}
 .chip.warnchip{background:#3a3020;color:#e7c27a}
 summary{min-height:44px;display:flex;align-items:center;font-weight:700;cursor:pointer}
+details:not([open]) > :not(summary){display:none}
 details.panel>summary{margin:-2px 0 4px}
 .tabbar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;display:flex;gap:2px;background:#0a1424;border-top:1px solid #24344c;padding:4px 6px calc(4px + env(safe-area-inset-bottom));z-index:20}
 .tabbar button{flex:1;min-height:48px;border-radius:10px;background:transparent;color:#93a8c2;font-size:13px;font-weight:650;padding:6px 2px}
@@ -384,6 +386,13 @@ details.panel>summary{margin:-2px 0 4px}
 <textarea id="backupText" readonly class="hidden" rows="8" spellcheck="false"></textarea>
 </details>
 </div>
+<details class="panel" id="fieldMeasure">
+<summary>入力欄の高さ診断</summary>
+<p class="muted">ホームの入力欄の表示サイズだけを測ります。入力した文字、施設、住所、ルールは出しません。測定の瞬間だけホームを表示し、すぐ元の画面に戻します。</p>
+<button type="button" onclick="measureHomeFields()">高さを測定</button>
+<button type="button" onclick="copyFieldMeasure()">結果をコピー</button>
+<textarea id="fieldMeasureText" readonly class="hidden" rows="14" spellcheck="false"></textarea>
+</details>
 <div class="panel muted">非公開の会食相手・日程・移動履歴は登録しないでください。Googleマップ起動時には指定した住所・経由地がGoogleへ送信されます。停車や進入は現地規制を優先してください。経由地指定は走行道路の完全固定ではありません。</div>
 </section>
 <nav class="tabbar">
@@ -1774,6 +1783,220 @@ function buildToday() {
     });
   }
   try { root.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch (e) { root.scrollIntoView(); }
+}
+var FIELD_MEASURE_IDS = [
+  ['todayOrigin', '出発地'],
+  ['todayDest', '目的地'],
+  ['todayDate', '到着日'],
+  ['todayTime', '到着時刻'],
+  ['todayDrive', '走行時間'],
+  ['todayBuffer', '余裕']
+];
+var FIELD_MEASURE_PROPS = ['height', 'min-height', 'max-height', 'padding', 'padding-top', 'padding-bottom', 'margin', 'margin-top', 'margin-bottom', 'line-height', 'appearance', '-webkit-appearance', 'font-size', 'box-sizing', 'border-top-width', 'border-bottom-width', 'display'];
+function fieldPx(n) {
+  if (typeof n !== 'number' || !isFinite(n)) return 'なし';
+  return (Math.round(n * 10) / 10) + 'px';
+}
+function fieldCss(style, prop) {
+  try { return style.getPropertyValue(prop) || ''; }
+  catch (e) { return ''; }
+}
+function fieldRect(el) {
+  var r = el.getBoundingClientRect();
+  return 'rectH=' + fieldPx(r.height) + ' rectW=' + fieldPx(r.width) + ' top=' + fieldPx(r.top);
+}
+function fieldNodeName(node) {
+  var name = node.tagName ? node.tagName.toLowerCase() : 'node';
+  if (node.id) name += '#' + node.id;
+  if (typeof node.className === 'string' && node.className.trim()) {
+    name += '.' + node.className.trim().split(/\s+/).join('.');
+  }
+  return name;
+}
+function fieldAncestors(el) {
+  var lines = [];
+  var node = el.parentElement;
+  var guard = 0;
+  while (node && node !== document.body && guard < 8) {
+    lines.push(fieldNodeName(node) + ' ' + fieldRect(node));
+    if (node.id === 'home') break;
+    node = node.parentElement;
+    guard += 1;
+  }
+  return lines;
+}
+function fieldAuthorRules(el) {
+  var hits = [];
+  function walk(rules, mediaOn) {
+    if (!rules || !mediaOn) return;
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (!rule) continue;
+      if (rule.type === 4 && rule.cssRules) {
+        var on = false;
+        try { on = window.matchMedia(rule.conditionText || '').matches; } catch (e) { on = false; }
+        walk(rule.cssRules, on);
+        continue;
+      }
+      if (rule.type !== 1 || !rule.selectorText || !rule.style) continue;
+      var selector = rule.selectorText;
+      var matched = false;
+      selector.split(',').forEach(function (part) {
+        if (matched) return;
+        var base = part.split('::')[0].trim();
+        if (!base) return;
+        try { if (el.matches(base)) matched = true; } catch (e) {}
+      });
+      if (!matched) continue;
+      var bits = [];
+      FIELD_MEASURE_PROPS.forEach(function (prop) {
+        var val = rule.style.getPropertyValue(prop);
+        if (!val) return;
+        var pri = rule.style.getPropertyPriority(prop);
+        bits.push(prop + ':' + val + (pri ? ' !' + pri : ''));
+      });
+      if (bits.length) hits.push(selector + ' { ' + bits.join('; ') + ' }');
+    }
+  }
+  for (var s = 0; s < document.styleSheets.length; s++) {
+    var rules = null;
+    try { rules = document.styleSheets[s].cssRules; }
+    catch (e) { hits.push('stylesheet unreadable'); continue; }
+    walk(rules, true);
+  }
+  return hits;
+}
+function fieldComputed(el) {
+  var style = getComputedStyle(el);
+  return FIELD_MEASURE_PROPS.map(function (prop) {
+    return prop + '=' + (fieldCss(style, prop) || 'なし');
+  }).join('; ');
+}
+function fieldPseudo(el) {
+  if (!el || (el.type !== 'date' && el.type !== 'time')) return [];
+  var names = ['::-webkit-datetime-edit', '::-webkit-datetime-edit-fields-wrapper', '::-webkit-calendar-picker-indicator'];
+  return names.map(function (name) {
+    var style;
+    try { style = getComputedStyle(el, name); }
+    catch (e) { return name + ' 取得不可'; }
+    if (!style) return name + ' なし';
+    return name + ' height=' + (fieldCss(style, 'height') || 'なし') + ' min-height=' + (fieldCss(style, 'min-height') || 'なし') + ' padding=' + (fieldCss(style, 'padding') || 'なし') + ' line-height=' + (fieldCss(style, 'line-height') || 'なし');
+  });
+}
+function fieldBlock(id, label) {
+  var el = $(id);
+  var lines = ['--- ' + id + ' ' + label + ' ---'];
+  if (!el) {
+    lines.push('要素なし');
+    return lines;
+  }
+  var rect = el.getBoundingClientRect();
+  lines.push('tag=' + el.tagName.toLowerCase() + ' type=' + (el.type || 'なし'));
+  lines.push('input ' + fieldRect(el) + ' offsetH=' + el.offsetHeight + 'px clientH=' + el.clientHeight + 'px');
+  var lab = document.querySelector('label[for="' + id + '"]');
+  if (!lab) lines.push('label なし');
+  else {
+    var lr = lab.getBoundingClientRect();
+    lines.push('label ' + fieldRect(lab) + ' gap=' + fieldPx(rect.top - lr.bottom));
+  }
+  lines.push('ancestors:');
+  fieldAncestors(el).forEach(function (line) { lines.push('  ' + line); });
+  lines.push('computed: ' + fieldComputed(el));
+  fieldPseudo(el).forEach(function (line) { lines.push('pseudo: ' + line); });
+  var rules = fieldAuthorRules(el);
+  lines.push(rules.length ? 'author（スタイルシート順。最終値はcomputed）:' : 'author: なし');
+  rules.forEach(function (line) { lines.push('  ' + line); });
+  return lines;
+}
+function fieldGeometry() {
+  function box(id) {
+    var el = $(id);
+    return el ? el.getBoundingClientRect() : null;
+  }
+  function crosses(a, b) {
+    if (!a || !b) return 'なし';
+    var apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+    return apart ? 'なし' : 'あり';
+  }
+  function stacked(a, b) {
+    if (!a || !b) return 'なし';
+    return a.bottom <= b.top + 0.5 ? '縦' : '横または重なり';
+  }
+  var date = box('todayDate');
+  var time = box('todayTime');
+  var drive = box('todayDrive');
+  var buffer = box('todayBuffer');
+  return [
+    '到着日と到着時刻: ' + stacked(date, time) + ' / 重なり=' + crosses(date, time),
+    '走行時間と余裕: ' + stacked(drive, buffer) + ' / 重なり=' + crosses(drive, buffer)
+  ];
+}
+function buildFieldMeasureReport() {
+  var home = $('home');
+  if (!home) return 'ホームがありません';
+  var wasHidden = home.classList.contains('hidden');
+  var scrollY = window.scrollY || window.pageYOffset || 0;
+  if (wasHidden) home.classList.remove('hidden');
+  try { window.scrollTo(0, 0); } catch (e) {}
+  try { void home.offsetHeight; } catch (e) {}
+  var lines = [];
+  try {
+    var vv = window.visualViewport;
+    var form = home.querySelector('.panel');
+    lines.push('POLI-ROUTE 入力欄診断');
+    lines.push('値・施設名・住所・運転ルールは含めていません');
+    lines.push('home表示: ' + (wasHidden ? '測定時だけ表示して戻した' : '測定前から表示'));
+    lines.push('innerWidth=' + window.innerWidth);
+    lines.push('innerHeight=' + window.innerHeight);
+    lines.push('visualViewport.width=' + (vv ? vv.width : 'なし'));
+    lines.push('visualViewport.height=' + (vv ? vv.height : 'なし'));
+    lines.push('visualViewport.scale=' + (vv ? vv.scale : 'なし'));
+    lines.push('devicePixelRatio=' + window.devicePixelRatio);
+    lines.push('clientWidth=' + document.documentElement.clientWidth);
+    lines.push('ua=' + navigator.userAgent);
+    lines.push('#home ' + fieldRect(home));
+    lines.push(form ? 'form.panel ' + fieldRect(form) : 'form.panel なし');
+    fieldGeometry().forEach(function (line) { lines.push(line); });
+    FIELD_MEASURE_IDS.forEach(function (item) {
+      fieldBlock(item[0], item[1]).forEach(function (line) { lines.push(line); });
+    });
+  } finally {
+    if (wasHidden) home.classList.add('hidden');
+    window.scrollTo(0, scrollY);
+  }
+  return lines.join('\n');
+}
+function measureHomeFields() {
+  var box = $('fieldMeasureText');
+  var text;
+  try { text = buildFieldMeasureReport(); }
+  catch (e) { text = '測定エラー：' + (e && e.message ? e.message : '失敗'); }
+  if (!box) return;
+  box.value = text;
+  box.classList.remove('hidden');
+}
+function copyFieldMeasure() {
+  var box = $('fieldMeasureText');
+  var text = box ? box.value : '';
+  if (!text) {
+    alert('先に「高さを測定」を押してください');
+    return;
+  }
+  if (box) {
+    box.classList.remove('hidden');
+    box.focus();
+    box.select();
+    try { box.setSelectionRange(0, box.value.length); } catch (e) {}
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () {
+      alert('診断結果をコピーしました');
+    }).catch(function () {
+      alert('自動コピーは使えません。表示された結果を長押ししてコピーしてください');
+    });
+    return;
+  }
+  alert('表示された結果を長押ししてコピーしてください');
 }
 function runDiagnostics() {
   var checks = [];
