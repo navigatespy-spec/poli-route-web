@@ -89,6 +89,8 @@ label{font-size:12px;color:#93a8c2}
 .suggest button{display:block;width:100%;text-align:left;background:#10233a;border-radius:0;margin:0}
 #diagnostics{word-break:break-word}
 #fieldMeasureText{min-height:220px;white-space:pre;overflow:auto}
+#knowhowPreview{white-space:pre-wrap;word-break:break-word;margin:8px 0}
+#knowhowActions.hidden{display:none}
 .chip{display:inline-block;font-size:12px;line-height:1.3;padding:2px 6px;border-radius:6px;margin-right:4px;vertical-align:1px}
 .chip.must{background:#3a2430;color:#ffb4a8}
 .chip.prefer{background:#16304c;color:#b7d7ff}
@@ -370,6 +372,18 @@ details.panel>summary{margin:-2px 0 4px}
 <button type="button" onclick="importFile('file','places')">施設リストを取り込む</button>
 </div>
 <div class="panel">
+<h3>運転ノウハウの一括取り込み</h3>
+<p class="muted">方面の優先道路、回避と理由、時間帯の注意、必須地点、右左折、ルートメモをJSONで追加します。確認するまで既存データは変わりません。追加は重複を残し、更新は同じ項目だけ差し替えます。</p>
+<input type="file" id="knowhowFile" accept=".json,application/json,text/json,text/plain,.txt">
+<button type="button" onclick="previewKnowhow('knowhowFile')">内容を確認</button>
+<p id="knowhowPreview" class="muted hidden"></p>
+<div id="knowhowActions" class="buttons hidden">
+<button type="button" onclick="applyKnowhow('add')">追加する</button>
+<button type="button" onclick="applyKnowhow('update')">重複を更新する</button>
+<button type="button" class="ghost" onclick="cancelKnowhow()">キャンセル</button>
+</div>
+</div>
+<div class="panel">
 <h3>バックアップを復元</h3>
 <p class="muted">施設・ルート・ルール・乗降を含むJSONで、今のデータを置き換えます。実行前に件数を確認します。</p>
 <input type="file" id="restoreFile" accept=".json,application/json,text/json,text/plain,.txt">
@@ -437,6 +451,8 @@ var draftAvoids = [];
 var editingRouteId = '';
 var editingPlaceId = '';
 var nidSeq = 0;
+var storageLocked = false;
+var pendingKnowhow = null;
 var STORAGE_KEY = 'poli-route-v5';
 var MAP_WAYPOINTS = 3;
 
@@ -663,9 +679,15 @@ function tab(t) {
   }
   try { window.scrollTo(0, 0); } catch (e) {}
 }
-function persist() {
+function persist(force) {
+  if (storageLocked && !force) {
+    setState('保存データを読めないため、上書きを止めています');
+    alert('以前の保存データを読めないため、上書きを止めています。バックアップの復元を使ってください');
+    return false;
+  }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    storageLocked = false;
     setState('準備OK・端末内保存');
     return true;
   } catch (e) {
@@ -1020,20 +1042,29 @@ function applyImportedData(o, mode) {
   if (full && mode !== 'places') {
     var placeCount = o.places.length;
     var routeCount = o.routes.length;
-    var ruleCount = Array.isArray(o.rules) ? o.rules.length : db.rules.length;
-    var parkCount = Array.isArray(o.parking) ? o.parking.length : (Array.isArray(db.parking) ? db.parking.length : 0);
     var hasNow = db.places.length || db.routes.length || db.rules.length || (Array.isArray(db.parking) && db.parking.length);
     if (!placeCount && !routeCount && hasNow) {
       alert('中身が空のファイルでは、今のデータを置き換えません');
       return false;
     }
+    var nextPlaces = o.places.map(normalizePlace).filter(Boolean);
+    var nextRoutes = o.routes.map(normalizeRoute).filter(Boolean);
+    var nextRules = Array.isArray(o.rules) ? o.rules.map(normalizeRule).filter(Boolean) : null;
+    var nextParking = Array.isArray(o.parking) ? o.parking.map(normalizeParking).filter(Boolean) : null;
+    var nextUsable = nextPlaces.length || nextRoutes.length || (nextRules && nextRules.length) || (nextParking && nextParking.length);
+    if (hasNow && !nextUsable) {
+      alert('ファイルから読み取れる記録がありません。今のデータは残しています');
+      return false;
+    }
     var nowPark = Array.isArray(db.parking) ? db.parking.length : 0;
-    if (!confirm('今のデータを置き換えます。現在は施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + nowPark + 'です。ファイルは施設' + placeCount + '・ルート' + routeCount + '・ルール' + ruleCount + '・乗降駐車' + parkCount + 'です。先にバックアップしてください。置き換えますか？')) return false;
+    var fileRules = Array.isArray(o.rules) ? ('ルール' + o.rules.length) : 'ルールはファイルに無いので現状維持';
+    var fileParks = Array.isArray(o.parking) ? ('乗降駐車' + o.parking.length) : '乗降駐車はファイルに無いので現状維持';
+    if (!confirm('今のデータを置き換えます。現在は施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + nowPark + 'です。ファイルは施設' + placeCount + '・ルート' + routeCount + '・' + fileRules + '・' + fileParks + 'です。先にバックアップしてください。置き換えますか？')) return false;
     db = {
-      places: o.places.map(normalizePlace).filter(Boolean),
-      routes: o.routes.map(normalizeRoute).filter(Boolean),
-      rules: Array.isArray(o.rules) ? o.rules.map(normalizeRule).filter(Boolean) : db.rules,
-      parking: Array.isArray(o.parking) ? o.parking.map(normalizeParking).filter(Boolean) : db.parking,
+      places: nextPlaces,
+      routes: nextRoutes,
+      rules: nextRules == null ? db.rules : nextRules,
+      parking: nextParking == null ? db.parking : nextParking,
       origin: typeof o.origin === 'string' ? o.origin : (db.origin || '')
     };
   } else {
@@ -1042,19 +1073,13 @@ function applyImportedData(o, mode) {
     var keys = {};
     db.places.forEach(function (x) { keys[x.name + '|' + x.address] = true; });
     arr.forEach(function (p) {
-      if (!p || !p.name) return;
-      var name = String(p.name);
-      var address = String(p.address || '');
-      var k = name + '|' + address;
+      var place = normalizePlace(p);
+      if (!place || !place.name) return;
+      var k = place.name + '|' + place.address;
       if (keys[k]) return;
       keys[k] = true;
-      db.places.push({
-        id: 'i' + Date.now() + '_' + db.places.length,
-        name: name,
-        address: address,
-        ward: String(p.ward || ''),
-        memo: ''
-      });
+      place.id = nid('p');
+      db.places.push(place);
     });
   }
   return true;
@@ -1091,7 +1116,7 @@ async function importFile(inputId, mode) {
     var text = await readFileText(f);
     var o = JSON.parse(String(text).replace(/^\uFEFF/, '').trim());
     if (!applyImportedData(o, mode || 'auto')) return;
-    if (!persist()) {
+    if (!persist(true)) {
       db = snapshot;
       refreshAllViews();
       alert('保存に失敗したため、取り込み前のデータに戻しました');
@@ -1099,7 +1124,9 @@ async function importFile(inputId, mode) {
       return;
     }
     refreshAllViews();
-    alert('取り込み完了：' + db.places.length + '施設');
+    alert(mode === 'restore'
+      ? '復元完了：施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + parkingArray().length
+      : '取り込み完了：施設' + db.places.length);
   } catch (e) {
     db = snapshot;
     refreshAllViews();
@@ -1108,6 +1135,280 @@ async function importFile(inputId, mode) {
   } finally {
     if (input) input.value = '';
   }
+}
+function knowhowLevel(value) {
+  var t = asText(value).trim();
+  if (t === 'must' || t === '必須' || t === '必ず通る') return 'must';
+  if (t === 'avoid' || t === '回避') return 'avoid';
+  if (t === 'caution' || t === '注意') return 'caution';
+  if (!t || t === 'prefer' || t === '優先') return 'prefer';
+  return t;
+}
+function knowhowRuleKey(rule) {
+  return [rule.area, rule.point, rule.level, rule.turn, rule.time].map(function (x) { return asText(x).trim(); }).join('|');
+}
+function knowhowRouteKey(route) {
+  return [route.name, route.from, route.to].map(function (x) { return asText(x).trim(); }).join('|');
+}
+function knowhowItem(value) {
+  if (typeof value === 'string') return {point: value.trim()};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value;
+}
+function rulesFromArea(area) {
+  if (!area || typeof area !== 'object' || Array.isArray(area)) return [];
+  var name = asText(area.area).trim() || '全方面';
+  var out = [];
+  function push(level, item) {
+    var src = knowhowItem(item);
+    if (!src) return;
+    var point = asText(src.point || src.road || src.name).trim();
+    if (!point) return;
+    var rule = normalizeRule({
+      area: name,
+      point: point,
+      level: knowhowLevel(level),
+      turn: asText(src.turn).trim(),
+      time: asText(src.time).trim() || 'いつでも',
+      memo: asText(src.memo || src.reason).trim()
+    });
+    if (rule) out.push(rule);
+  }
+  [['prefer', 'prefer'], ['avoid', 'avoid'], ['must', 'must'], ['cautions', 'caution'], ['caution', 'caution']].forEach(function (pair) {
+    var list = area[pair[0]];
+    if (!Array.isArray(list)) return;
+    list.forEach(function (item) { push(pair[1], item); });
+  });
+  return out;
+}
+function normalizeKnowhowRoute(route) {
+  var next = normalizeRoute(route);
+  if (!next) return null;
+  if (!next.name) next.name = [next.from, next.to].filter(Boolean).join(' → ') || 'ノウハウルート';
+  return next;
+}
+function knowhowBody(o) {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('JSONの形式が正しくありません');
+  if (o.knowhow && typeof o.knowhow === 'object' && !Array.isArray(o.knowhow)) {
+    return {body: o.knowhow, skippedPlaces: Array.isArray(o.places) ? o.places.length : 0};
+  }
+  if (Array.isArray(o.places) && Array.isArray(o.routes)) {
+    throw new Error('このファイルはバックアップです。「バックアップを復元」を使ってください');
+  }
+  if (Array.isArray(o.rules) || Array.isArray(o.routes) || Array.isArray(o.areas)) {
+    return {body: o, skippedPlaces: 0};
+  }
+  throw new Error('ノウハウのrules、areas、routesがありません');
+}
+function parseKnowhow(o) {
+  var src = knowhowBody(o);
+  var body = src.body;
+  var rules = [];
+  if (Array.isArray(body.rules)) {
+    body.rules.forEach(function (rule) {
+      if (!rule || typeof rule !== 'object') return;
+      var next = normalizeRule({
+        area: asText(rule.area).trim() || '全方面',
+        point: rule.point,
+        level: knowhowLevel(rule.level),
+        turn: asText(rule.turn).trim(),
+        time: asText(rule.time).trim() || 'いつでも',
+        memo: rule.memo
+      });
+      if (next && next.point) rules.push(next);
+    });
+  }
+  if (Array.isArray(body.areas)) {
+    body.areas.forEach(function (area) {
+      rules = rules.concat(rulesFromArea(area));
+    });
+  }
+  var routes = [];
+  if (Array.isArray(body.routes)) {
+    body.routes.forEach(function (route) {
+      var next = normalizeKnowhowRoute(route);
+      if (next) routes.push(next);
+    });
+  }
+  if (!rules.length && !routes.length) throw new Error('読み取れるノウハウがありません');
+  return {rules: rules, routes: routes, skippedPlaces: src.skippedPlaces};
+}
+function knowhowPlan(data) {
+  var ruleKeys = {};
+  var routeKeys = {};
+  (Array.isArray(db.rules) ? db.rules : []).forEach(function (rule) { ruleKeys[knowhowRuleKey(rule)] = true; });
+  (Array.isArray(db.routes) ? db.routes : []).forEach(function (route) { routeKeys[knowhowRouteKey(route)] = true; });
+  var seenRules = {};
+  var seenRoutes = {};
+  var freshRules = [];
+  var dupRules = [];
+  var freshRoutes = [];
+  var dupRoutes = [];
+  var fileDup = 0;
+  data.rules.forEach(function (rule) {
+    var key = knowhowRuleKey(rule);
+    if (seenRules[key]) { fileDup += 1; return; }
+    seenRules[key] = true;
+    if (ruleKeys[key]) dupRules.push(rule);
+    else freshRules.push(rule);
+  });
+  data.routes.forEach(function (route) {
+    var key = knowhowRouteKey(route);
+    if (seenRoutes[key]) { fileDup += 1; return; }
+    seenRoutes[key] = true;
+    if (routeKeys[key]) dupRoutes.push(route);
+    else freshRoutes.push(route);
+  });
+  return {freshRules: freshRules, dupRules: dupRules, freshRoutes: freshRoutes, dupRoutes: dupRoutes, fileDup: fileDup};
+}
+function knowhowLines(data) {
+  var plan = knowhowPlan(data);
+  var lines = [];
+  lines.push('ルール ' + data.rules.length + '件 / ルート ' + data.routes.length + '件');
+  lines.push('新しいルール ' + plan.freshRules.length + ' / 重複ルール ' + plan.dupRules.length);
+  lines.push('新しいルート ' + plan.freshRoutes.length + ' / 重複ルート ' + plan.dupRoutes.length);
+  if (data.skippedPlaces) lines.push('施設' + data.skippedPlaces + '件はこの取り込みでは追加しません');
+  if (plan.fileDup) lines.push('ファイル内の重複 ' + plan.fileDup + '件は1件として扱います');
+  function listRules(title, rows) {
+    if (!rows.length) return;
+    lines.push(title);
+    rows.slice(0, 8).forEach(function (rule) {
+      lines.push('- ' + [rule.area, rule.point, levelLabel(rule.level), rule.turn || '曲がり方なし', rule.time, rule.memo].filter(Boolean).join(' / '));
+    });
+    if (rows.length > 8) lines.push('ほか ' + (rows.length - 8) + '件');
+  }
+  function listRoutes(title, rows) {
+    if (!rows.length) return;
+    lines.push(title);
+    rows.slice(0, 8).forEach(function (route) {
+      var musts = pointsFromRoute(route).filter(function (p) { return p.priority === 'must'; }).map(function (p) { return p.place + ' ' + p.turn; });
+      var avoids = (route.avoids || []).map(function (a) { return a.road + (a.reason ? '（' + a.reason + '）' : ''); });
+      lines.push('- ' + route.name + ' / ' + (route.from || '出発地なし') + ' → ' + (route.to || '目的地なし') + ' / ' + (route.time || 'いつでも'));
+      if (musts.length) lines.push('  必須 ' + musts.join('、'));
+      if (avoids.length) lines.push('  回避 ' + avoids.join('、'));
+      if (route.memo) lines.push('  メモ ' + route.memo);
+    });
+    if (rows.length > 8) lines.push('ほか ' + (rows.length - 8) + '件');
+  }
+  listRules('新しいルール', plan.freshRules);
+  listRules('重複ルール', plan.dupRules);
+  listRoutes('新しいルート', plan.freshRoutes);
+  listRoutes('重複ルート', plan.dupRoutes);
+  if (!data.rules.length && !data.routes.length) lines.push('読み取れるノウハウがありません');
+  return lines.join('\n');
+}
+function showKnowhowPreview(text, actionable) {
+  var box = $('knowhowPreview');
+  var actions = $('knowhowActions');
+  if (box) {
+    box.textContent = text;
+    box.classList.remove('hidden');
+  }
+  if (actions) actions.classList.toggle('hidden', !actionable);
+}
+function previewKnowhow(inputId) {
+  var input = $(inputId || 'knowhowFile');
+  var f = input && input.files && input.files[0];
+  if (!f) return alert('JSONファイルを選択');
+  readFileText(f).then(function (text) {
+    var raw = String(text || '').replace(/^\uFEFF/, '').trim();
+    if (!raw) throw new Error('空のファイルです');
+    var data = parseKnowhow(JSON.parse(raw));
+    if (!data.rules.length && !data.routes.length) throw new Error('読み取れるノウハウがありません');
+    pendingKnowhow = data;
+    showKnowhowPreview(knowhowLines(data), true);
+  }).catch(function (e) {
+    pendingKnowhow = null;
+    showKnowhowPreview('確認できません：' + (e && e.message ? e.message : '不明') + '\n既存データは変更していません', false);
+    alert('確認エラー：' + (e && e.message ? e.message : '不明'));
+  }).then(function () {
+    if (input) input.value = '';
+  });
+}
+function mergeKnowhow(data, mode) {
+  var plan = knowhowPlan(data);
+  var ruleCount = 0;
+  var routeCount = 0;
+  if (!Array.isArray(db.rules)) db.rules = [];
+  if (!Array.isArray(db.routes)) db.routes = [];
+  plan.freshRules.forEach(function (rule) {
+    rule.id = nid('rule');
+    db.rules.push(rule);
+    ruleCount += 1;
+  });
+  plan.freshRoutes.forEach(function (route) {
+    route.id = nid('r');
+    db.routes.push(route);
+    routeCount += 1;
+  });
+  if (mode === 'update') {
+    plan.dupRules.forEach(function (rule) {
+      var key = knowhowRuleKey(rule);
+      var current = db.rules.find(function (item) { return knowhowRuleKey(item) === key; });
+      if (!current) return;
+      current.area = rule.area;
+      current.point = rule.point;
+      current.level = rule.level;
+      current.turn = rule.turn;
+      current.time = rule.time;
+      current.memo = rule.memo;
+      ruleCount += 1;
+    });
+    plan.dupRoutes.forEach(function (route) {
+      var key = knowhowRouteKey(route);
+      var current = db.routes.find(function (item) { return knowhowRouteKey(item) === key; });
+      if (!current) return;
+      var id = current.id;
+      current.name = route.name;
+      current.from = route.from;
+      current.to = route.to;
+      current.time = route.time;
+      current.memo = route.memo;
+      current.points = route.points;
+      current.avoids = route.avoids;
+      current.via = route.via;
+      current.id = id;
+      routeCount += 1;
+    });
+  }
+  return {changed: ruleCount + routeCount > 0, rules: ruleCount, routes: routeCount};
+}
+function applyKnowhow(mode) {
+  if (!pendingKnowhow) return alert('先に内容を確認してください');
+  var snapshot = JSON.parse(JSON.stringify(db));
+  try {
+    var result = mergeKnowhow(pendingKnowhow, mode === 'update' ? 'update' : 'add');
+    if (!result.changed) {
+      alert(mode === 'update' ? '更新する差分はありません' : '追加できる新しい項目はありません。重複はそのまま残しています');
+      return;
+    }
+    if (!persist(true)) {
+      db = snapshot;
+      refreshAllViews();
+      alert('保存に失敗したため、取り込み前のデータに戻しました');
+      return;
+    }
+    refreshAllViews();
+    alert((mode === 'update' ? 'ノウハウを更新しました。' : 'ノウハウを追加しました。') + 'ルール' + result.rules + '・ルート' + result.routes);
+    cancelKnowhow();
+  } catch (e) {
+    db = snapshot;
+    refreshAllViews();
+    alert('取り込みエラー：' + (e && e.message ? e.message : '不明') + '。既存データは残しています');
+    setState('エラー：' + (e && e.message ? e.message : '取り込みに失敗しました') + '。既存データは残しています');
+  }
+}
+function cancelKnowhow() {
+  pendingKnowhow = null;
+  var box = $('knowhowPreview');
+  var actions = $('knowhowActions');
+  if (box) {
+    box.textContent = '';
+    box.classList.add('hidden');
+  }
+  if (actions) actions.classList.add('hidden');
+  var input = $('knowhowFile');
+  if (input) input.value = '';
 }
 function backupJson() {
   return JSON.stringify(db, null, 2);
@@ -1197,10 +1498,11 @@ function loadStored() {
         parking: Array.isArray(x.parking) ? x.parking.map(normalizeParking).filter(Boolean) : [],
         origin: typeof x.origin === 'string' ? x.origin : ''
       };
+      return;
     }
-  } catch (e) {
-    setState('起動OK・保存データを読めないため空の状態で開始します');
-  }
+  } catch (e) {}
+  storageLocked = true;
+  setState('起動OK・保存データを読めないため、上書きを止めています');
 }
 function syncOriginFields() {
   var value = db.origin || '';
