@@ -1,4 +1,4 @@
-var CACHE = 'poli-route-shell-8';
+var CACHE = 'poli-route-shell-9';
 var SHELL = [
   './',
   './index.html',
@@ -41,7 +41,7 @@ self.addEventListener('fetch', function (event) {
   try { url = new URL(req.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;
   if (!isShell(url.pathname)) return;
-  event.respondWith(fetch(req).then(function (res) {
+  event.respondWith(fetch(req, {cache: 'reload'}).then(function (res) {
     if (res && res.ok) {
       var copy = res.clone();
       caches.open(CACHE).then(function (cache) { cache.put(req, copy); });

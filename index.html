@@ -65,6 +65,9 @@ label{font-size:12px;color:#93a8c2}
 @media (max-width:359px){
 .pair{grid-template-columns:minmax(0,1fr)}
 }
+@media (max-width:600px){
+.pair.when-narrow{grid-template-columns:minmax(0,1fr)}
+}
 #state{font-size:12px;color:#8fd9a8;margin:0}
 .suggest{background:#0c1a2d;border:1px solid #345274;border-radius:10px;margin:-4px 0 8px;max-height:200px;overflow:auto;-webkit-overflow-scrolling:touch}
 .suggest button{display:block;width:100%;text-align:left;background:#10233a;border-radius:0;margin:0}
@@ -99,7 +102,7 @@ details.panel>summary{margin:-2px 0 4px}
 <input id="todayDest" list="placeSuggestions" placeholder="施設名または住所" autocomplete="off">
 <datalist id="placeSuggestions"></datalist>
 <div id="todaySuggest" class="suggest hidden"></div>
-<div class="pair">
+<div class="pair when-narrow">
 <div>
 <label for="todayDate">到着日</label>
 <input id="todayDate" type="date">
@@ -109,7 +112,7 @@ details.panel>summary{margin:-2px 0 4px}
 <input id="todayTime" type="time" value="18:00">
 </div>
 </div>
-<div class="pair">
+<div class="pair when-narrow">
 <div>
 <label for="todayDrive">走行時間（分）</label>
 <input id="todayDrive" type="number" min="1" placeholder="手入力" inputmode="numeric">
@@ -1817,6 +1820,13 @@ function boot() {
 function registerAppCache() {
   if (!('serviceWorker' in navigator)) return;
   if (location.protocol === 'file:') return;
+  var hadController = !!navigator.serviceWorker.controller;
+  var reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  });
   navigator.serviceWorker.register('sw.js').catch(function () {});
 }
 boot();
