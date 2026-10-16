@@ -1,4 +1,4 @@
-var CACHE = 'poli-route-shell-6';
+var CACHE = 'poli-route-shell-7';
 var SHELL = [
   './',
   './index.html',

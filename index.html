@@ -14,150 +14,264 @@
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" href="icons/icon-192.png" type="image/png">
 <style>
-:root{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0b1220;color:#f2f5fa;color-scheme:dark;-webkit-text-size-adjust:100%}
-body{max-width:650px;margin:auto;padding:18px;padding-top:calc(18px + env(safe-area-inset-top));padding-right:calc(18px + env(safe-area-inset-right));padding-bottom:calc(18px + env(safe-area-inset-bottom));padding-left:calc(18px + env(safe-area-inset-left))}
-h1{font-size:26px}h4{font-size:16px;margin:16px 0 8px}
-nav{display:flex;gap:7px;margin:18px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
-nav button{white-space:nowrap;flex-shrink:0}
-.summary{border-left:3px solid #65afff;padding-left:12px;margin:12px 0}
-.warn{color:#ffd78b}
-.big{font-size:27px;font-weight:800;color:#a8d8ff}
-.times{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0 4px}
-.times div{background:#0c1a2d;border-radius:10px;padding:10px 8px}
-.times span{display:block;font-size:12px;color:#b3c3da}
-.times b{display:block;font-size:20px;line-height:1.25;color:#a8d8ff;word-break:break-word}
-.plan-card{background:#0c1a2d;border-radius:12px;padding:12px;margin:10px 0}
-.plan-card ol{margin:8px 0;padding-left:1.4em}
-.plan-card li{margin:6px 0;line-height:1.45}
-#todayResult h3{font-size:16px;margin:14px 0 6px}
+:root{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0b1220;color:#e8eef6;color-scheme:dark;-webkit-text-size-adjust:100%}
+html,body{background:#0b1220}
+body{max-width:430px;margin:0 auto;padding:12px 14px calc(68px + env(safe-area-inset-bottom));padding-top:calc(10px + env(safe-area-inset-top));font-size:15px;line-height:1.45}
+h1{font-size:20px;margin:0;letter-spacing:.02em}
+h2{font-size:18px;margin:0 0 8px}
+h3{font-size:15px;margin:12px 0 6px}
+h4{font-size:14px;margin:12px 0 6px}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.lead{margin:0 0 8px}
+.warn{color:#e7c27a}
+.times{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.times .depart{grid-column:1 / -1;background:#10233d;border-radius:12px;padding:10px 12px}
+.times div{background:#0c1a2d;border-radius:10px;padding:8px}
+.times span{display:block;font-size:12px;color:#93a8c2}
+.times b{display:block;font-size:16px;line-height:1.25;color:#d7ebff;word-break:break-word}
+.times .depart b{font-size:32px;font-weight:800;letter-spacing:.01em}
+.times .depart.is-empty b{font-size:16px;font-weight:650;color:#93a8c2}
+.plan-card{background:#0c1a2d;border-radius:12px;padding:10px 12px;margin:8px 0}
+.plan-card ol{margin:6px 0;padding-left:1.3em}
+.plan-card li{margin:4px 0}
+.plan-card p{margin:4px 0}
+#todayResult h3{font-size:14px;margin:12px 0 4px}
 #todayResult button{width:100%;margin:6px 0}
-#todayResult button.navstart{font-size:17px;margin-top:0}
-.line{border-top:1px solid #40516a;padding:10px 0}
-button,input,textarea,select,a{touch-action:manipulation}
-button{background:#243b59;color:white;border:0;border-radius:9px;padding:11px;cursor:pointer;min-height:44px}
-button.primary{background:#65afff;color:#081322;font-weight:bold}
-input,textarea,select{box-sizing:border-box;width:100%;padding:12px;border-radius:9px;border:1px solid #3b5476;background:#0c1a2d;color:white;margin:5px 0 13px;font:inherit;font-size:16px;min-height:44px}
-textarea{min-height:88px}
+#todayResult button.navstart{min-height:52px;font-size:17px;margin:0 0 8px}
+.gaps{margin:8px 0;padding:8px 10px;background:#0c1a2d;border-radius:10px;color:#93a8c2;font-size:13px;line-height:1.55}
+.line{border-top:1px solid #2c415c;padding:8px 0}
+button,input,textarea,select,a,summary{touch-action:manipulation}
+button{background:#1c314c;color:#fff;border:0;border-radius:10px;padding:10px 12px;cursor:pointer;min-height:44px;font:inherit}
+button.primary{background:#4c9dff;color:#061018;font-weight:750}
+button.ghost{background:transparent;color:#b9cbe0;border:1px solid #345274}
+input,textarea,select{box-sizing:border-box;width:100%;padding:10px 12px;border-radius:10px;border:1px solid #345274;background:#0c1a2d;color:#fff;margin:2px 0 8px;font:inherit;font-size:16px;min-height:44px}
+textarea{min-height:72px}
 input[type="date"],input[type="time"],input[type="file"]{color-scheme:dark}
-.panel{background:#17243a;border-radius:15px;padding:16px;margin:12px 0}
-.item{padding:13px 0;border-bottom:1px solid #3b4b62}
-.muted{color:#b3c3da;font-size:13px;line-height:1.6}
+.panel{background:#142033;border-radius:14px;padding:12px;margin:8px 0}
+.item{padding:10px 0;border-bottom:1px solid #2a3d56}
+.item:last-child{border-bottom:0}
+.muted{color:#93a8c2;font-size:13px;line-height:1.5}
+.clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hidden{display:none}
-.buttons{display:flex;flex-wrap:wrap;gap:6px}
-.buttons button{font-size:12px;padding:9px}
-label{font-size:13px;color:#b3c3da}
-#state{font-size:12px;color:#a9edb9}
-.suggest{background:#0c1a2d;border:1px solid #3b5476;border-radius:9px;margin:-8px 0 13px;max-height:220px;overflow:auto;-webkit-overflow-scrolling:touch}
+.buttons{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.buttons button{font-size:13px;padding:8px 10px;min-height:44px}
+.panel>button{width:100%;margin:4px 0}
+.pair input,.pair select{min-width:0}
+label{font-size:12px;color:#93a8c2}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#state{font-size:12px;color:#8fd9a8;margin:0}
+.suggest{background:#0c1a2d;border:1px solid #345274;border-radius:10px;margin:-4px 0 8px;max-height:200px;overflow:auto;-webkit-overflow-scrolling:touch}
 .suggest button{display:block;width:100%;text-align:left;background:#10233a;border-radius:0;margin:0}
 #diagnostics{word-break:break-word}
+.chip{display:inline-block;font-size:12px;line-height:1.3;padding:2px 6px;border-radius:6px;margin-right:4px;vertical-align:1px}
+.chip.must{background:#3a2430;color:#ffb4a8}
+.chip.prefer{background:#16304c;color:#b7d7ff}
+.chip.avoid{background:#3a3020;color:#e7c27a}
+.chip.fast{background:#14324a;color:#9fd0ff}
+.chip.cheap{background:#163528;color:#b7e7c8}
+.chip.warnchip{background:#3a3020;color:#e7c27a}
+summary{min-height:44px;display:flex;align-items:center;font-weight:700;cursor:pointer}
+details.panel>summary{margin:-2px 0 4px}
+.tabbar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:430px;display:flex;gap:2px;background:#0a1424;border-top:1px solid #24344c;padding:4px 6px calc(4px + env(safe-area-inset-bottom));z-index:20}
+.tabbar button{flex:1;min-height:48px;border-radius:10px;background:transparent;color:#93a8c2;font-size:13px;font-weight:650;padding:6px 2px}
+.tabbar button.primary{background:#16304c;color:#4c9dff}
 </style>
 </head>
 <body>
-<h1>🚙 POLI-ROUTE</h1>
-<p class="muted">秘書の運転ノウハウを継ぐ、プライベート・ルート帳</p>
+<header class="top">
+<h1>POLI-ROUTE</h1>
 <p id="state">起動準備中…</p>
-<p id="diagnostics" class="muted"></p>
-<p class="muted">v5：公開用の空アプリ。機密データは別途読み込んでください。</p>
-<nav>
-<button type="button" class="primary" onclick="tab('today')">本日の運転</button>
-<button type="button" onclick="tab('places')">施設検索</button>
-<button type="button" onclick="tab('routes')">ルート</button>
-<button type="button" onclick="tab('planner')">出発逆算</button>
-<button type="button" onclick="tab('rules')">運転ルール</button>
-<button type="button" onclick="tab('parking')">乗降・駐車</button>
-<button type="button" onclick="tab('data')">データ管理</button>
-</nav>
+</header>
+<p class="muted lead">出発前に、出発時刻・ルート・乗降・駐車場を確認する画面です。</p>
 
-<section id="today">
+<section id="home">
 <div class="panel">
 <h2>今日の運転プラン</h2>
-<p class="muted">目的地と到着希望時刻で、この端末に保存した施設・ルート・乗降・駐車を集めます。無い項目は未登録と出します。走行時間は手入力です。交通情報、料金、満空、規制、一方通行は調べません。</p>
-<label>出発地（入力した内容はこの端末内に保存）</label>
-<input id="todayOrigin" placeholder="出発拠点の住所" autocomplete="off">
-<label>目的地（施設名または住所）</label>
-<input id="todayDest" list="placeSuggestions" placeholder="登録施設を検索、または住所を入力" autocomplete="off">
+<label for="todayOrigin">出発地</label>
+<input id="todayOrigin" placeholder="保存した出発拠点" autocomplete="off">
+<label for="todayDest">目的地</label>
+<input id="todayDest" list="placeSuggestions" placeholder="施設名または住所" autocomplete="off">
 <datalist id="placeSuggestions"></datalist>
 <div id="todaySuggest" class="suggest hidden"></div>
-<label>到着希望日</label>
+<div class="pair">
+<div>
+<label for="todayDate">到着日</label>
 <input id="todayDate" type="date">
-<label>到着希望時刻</label>
-<input id="todayTime" type="time" value="18:00">
-<label>走行予定時間（分・Googleマップで確認）</label>
-<input id="todayDrive" type="number" min="1" placeholder="例：35" inputmode="numeric">
-<label>余裕の持ち方</label>
-<select id="todayBuffer">
-<option value="0">急ぎ：0分</option>
-<option value="10" selected>通常：10分</option>
-<option value="20">余裕あり：20分</option>
-<option value="30">かなり余裕：30分</option>
-</select>
-<button type="button" class="primary" onclick="buildToday()">運転プランを作成</button>
-<button type="button" onclick="todayMap()">Googleマップで所要時間を確認</button>
-<p class="muted">計算結果は端末内で処理。Googleマップを開くと入力した地点情報がGoogleに渡ります。</p>
 </div>
-<div id="todayResult" class="panel"><p class="muted">目的地と到着時刻を設定して「運転プランを作成」を押してね。</p></div>
+<div>
+<label for="todayTime">到着時刻</label>
+<input id="todayTime" type="time" value="18:00">
+</div>
+</div>
+<div class="pair">
+<div>
+<label for="todayDrive">走行時間（分）</label>
+<input id="todayDrive" type="number" min="1" placeholder="手入力" inputmode="numeric">
+</div>
+<div>
+<label for="todayBuffer">余裕</label>
+<select id="todayBuffer">
+<option value="0">急ぎ 0分</option>
+<option value="10" selected>通常 10分</option>
+<option value="20">余裕 20分</option>
+<option value="30">かなり余裕 30分</option>
+</select>
+</div>
+</div>
+<button type="button" onclick="buildToday()">プランを表示</button>
+<button type="button" class="ghost" onclick="todayMap()">所要時間を地図で見る</button>
+<p class="muted">走行時間は手入力です。交通予測、料金、満空は出しません。地図を開くと地点名がGoogleに渡ります。</p>
+</div>
+<div id="todayResult" class="panel"><p class="muted">目的地と到着時刻を入れて「プランを表示」。</p></div>
+<div id="planner" class="hidden">
+<input id="origin" placeholder="出発住所" autocomplete="off">
+<input id="destination" placeholder="施設名または住所" autocomplete="off">
+<div id="destSuggest" class="suggest hidden"></div>
+<input id="arrivalDate" type="date">
+<input id="arrivalTime" type="time" value="18:00">
+<input id="driveMinutes" type="number" min="1" inputmode="numeric">
+<select id="bufferMinutes">
+<option value="0">急ぎ 0分</option>
+<option value="10" selected>通常 10分</option>
+<option value="20">余裕あり 20分</option>
+<option value="30">かなり余裕 30分</option>
+</select>
+<button type="button" onclick="calculateDeparture()">出発時刻を計算</button>
+<button type="button" onclick="plannerMap()">Googleマップで所要時間を確認</button>
+<div id="departureResult"></div>
+</div>
 </section>
 
-<section id="places">
+<section id="places" class="hidden">
 <div class="panel">
-<h3>施設を探す</h3>
-<input id="search" placeholder="店名・区・住所を検索" autocomplete="off" oninput="render()">
+<label for="search">施設を探す</label>
+<input id="search" placeholder="施設名・住所" autocomplete="off" oninput="render()">
 <p id="count" class="muted"></p>
 <div id="list"></div>
 </div>
-<div class="panel">
-<h3>施設と車寄せを追加</h3>
-<label>施設名</label>
+<details class="panel" id="placeEditor">
+<summary>施設を追加・編集</summary>
+<label for="pn">施設名</label>
 <input id="pn" autocomplete="off">
-<label>住所</label>
+<label for="pa">住所</label>
 <input id="pa" autocomplete="off">
-<label>車寄せ・進入方向・注意点</label>
+<label for="pm">車寄せ・進入・注意</label>
 <textarea id="pm"></textarea>
-<button type="button" class="primary" onclick="addPlace()">施設を保存</button>
+<button type="button" class="primary" id="placeSave" onclick="addPlace()">施設を保存</button>
+<button type="button" class="ghost" onclick="clearPlaceForm()">入力をクリア</button>
+</details>
+<details class="panel" id="parkEditor">
+<summary>乗降・駐車場を追加</summary>
+<p class="muted">施設に紐づけて保存します。節約と急ぎは分けて登録できます。料金は確認した金額だけを記録し、満空は記録しません。</p>
+<label for="parkPlace">対象施設名</label>
+<input id="parkPlace" placeholder="施設名" autocomplete="off">
+<div id="parkSuggest" class="suggest hidden"></div>
+<label for="parkAddress">施設の住所（任意）</label>
+<input id="parkAddress" autocomplete="off">
+<label for="dropoff">乗降位置・徒歩案内</label>
+<textarea id="dropoff" placeholder="例：正面の車寄せ。停車規制は現地確認"></textarea>
+<label for="dropStatus">乗降場所の確認状況</label>
+<select id="dropStatus">
+<option>要現地確認</option>
+<option>現地確認済み</option>
+<option>利用不可</option>
+</select>
+<label for="parkName">駐車場名</label>
+<input id="parkName" placeholder="例：〇〇パーキング" autocomplete="off">
+<label for="parkLocation">駐車場住所</label>
+<input id="parkLocation" autocomplete="off">
+<label for="parkMode">用途</label>
+<select id="parkMode">
+<option value="cheap">節約</option>
+<option value="fast">急ぎ</option>
+<option value="both">節約と急ぎの両方</option>
+</select>
+<div class="pair">
+<div>
+<label for="parkPrice">参考料金（円）</label>
+<input id="parkPrice" type="number" min="0" placeholder="未確認は空欄" inputmode="numeric">
+</div>
+<div>
+<label for="parkDuration">対象時間（分）</label>
+<input id="parkDuration" type="number" min="1" value="120" inputmode="numeric">
+</div>
+</div>
+<label for="parkChecked">料金確認日</label>
+<input id="parkChecked" type="date">
+<label for="parkMemo">入庫・徒歩の注意</label>
+<textarea id="parkMemo"></textarea>
+<button type="button" class="primary" onclick="saveParking()">乗降・駐車を保存</button>
+<p class="muted">路上の違法な駐停車は案内しません。標識と施設の指示を優先してください。</p>
+</details>
+<div class="panel">
+<label for="parkSearch">登録済みの乗降・駐車場</label>
+<input id="parkSearch" placeholder="施設・駐車場名" autocomplete="off" oninput="renderParking()">
+<div id="parkingList"></div>
+</div>
+<div class="panel">
+<p class="muted">新しい候補はPPPark!で検索します。施設名は自動では渡しません。</p>
+<button type="button" onclick="openUrl('https://pppark.com/')">PPPark!検索サイトを開く</button>
 </div>
 </section>
 
 <section id="routes" class="hidden">
-<div class="panel" id="routeEditor">
-<h3>オリジナルルート・交差点指示</h3>
-<p class="muted">通過地点は通る順番に登録します。右折・左折・直進・通過は、自分で記録した指示です。交通規制や一方通行を調べて案内を作る機能はありません。現地の標識と規制を優先してください。</p>
-<p class="muted">地図上をタップして地点を選ぶ機能は、外部の地図サービスがないと住所を取得できないため入れていません。</p>
-<label>ルート名</label>
-<input id="rn" placeholder="例：夕方の東京駅行き" autocomplete="off">
-<label>出発地</label>
+<div class="panel">
+<label for="routeSearch">保存したルート</label>
+<input id="routeSearch" placeholder="ルート名・地点・道路" autocomplete="off" oninput="renderRoutes()">
+<p class="muted">曲がり方は自分の記録です。規制や一方通行より優先されません。</p>
+<div id="routesList"></div>
+</div>
+<details class="panel" id="routeEditor">
+<summary>ルートを登録・編集</summary>
+<p class="muted">通過順に地点を登録します。右折・左折・直進・通過は記録であり、規制の調査結果ではありません。</p>
+<label for="rn">ルート名</label>
+<input id="rn" placeholder="例：夕方の会場行き" autocomplete="off">
+<div class="pair">
+<div>
+<label for="rf">出発地</label>
 <input id="rf" autocomplete="off">
-<label>目的地・車寄せの住所</label>
+</div>
+<div>
+<label for="rt">目的地</label>
 <input id="rt" autocomplete="off">
+</div>
+</div>
 <h4>通過地点</h4>
-<label>地点名</label>
+<label for="rp">地点名</label>
 <input id="rp" placeholder="交差点・施設・住所" autocomplete="off">
 <div id="rpSuggest" class="suggest hidden"></div>
-<label>交差点での指示</label>
+<div class="pair">
+<div>
+<label for="rpTurn">曲がり方</label>
 <select id="rpTurn">
 <option>右折</option>
 <option>左折</option>
 <option>直進</option>
 <option selected>通過</option>
 </select>
-<label>区分</label>
+</div>
+<div>
+<label for="rpPriority">区分</label>
 <select id="rpPriority">
 <option value="must">必須</option>
 <option value="prefer" selected>優先</option>
 </select>
+</div>
+</div>
 <button type="button" onclick="addDraftPoint()">地点を追加</button>
-<label>複数地点をまとめて追加（1行に1地点。指示は通過、区分は優先）</label>
+<label for="rv">まとめて追加（1行に1地点。通過・優先）</label>
 <textarea id="rv" placeholder="地点1&#10;地点2"></textarea>
 <button type="button" onclick="addDraftLines()">まとめて追加</button>
 <div id="draftPoints"></div>
-<h4>避けたい道路</h4>
-<label>道路名</label>
+<h4>このルートで避けたい道路</h4>
+<label for="raRoad">道路名</label>
 <input id="raRoad" placeholder="例：〇〇通り" autocomplete="off">
-<label>理由</label>
+<label for="raReason">理由</label>
 <input id="raReason" placeholder="例：夕方に混む" autocomplete="off">
-<button type="button" onclick="addDraftAvoid()">避けたい道路を追加</button>
+<button type="button" onclick="addDraftAvoid()">回避道路を追加</button>
 <div id="draftAvoids"></div>
-<p class="warn">Googleマップに渡せる経由地は先頭3件までです。右折・左折・直進・必須の道路はGoogleマップでは強制できません。地点名だけを渡し、指示そのものは送りません。</p>
-<label>使う時間帯</label>
+<p class="warn">Googleマップへ渡すのは地点名だけ、先頭3件までです。右折・左折・直進・必須・回避は地図側で強制できません。</p>
+<label for="rh">使う時間帯</label>
 <select id="rh">
 <option>いつでも</option>
 <option>朝</option>
@@ -165,68 +279,43 @@ label{font-size:13px;color:#b3c3da}
 <option>夕方</option>
 <option>夜</option>
 </select>
-<label>選ぶ理由</label>
+<label for="rm">選ぶ理由</label>
 <textarea id="rm"></textarea>
 <button type="button" class="primary" id="routeSave" onclick="addRoute()">ルートを保存</button>
-<button type="button" onclick="clearRouteForm()">入力をクリア</button>
-</div>
+<button type="button" class="ghost" onclick="clearRouteForm()">入力をクリア</button>
+</details>
 <div class="panel">
-<h3>保存したルート</h3>
-<p class="muted">表示している曲がり方は記録です。走行できる道の保証ではなく、規制や一方通行より優先されません。</p>
-<div id="routesList"></div>
+<h3>優先道路・回避・注意</h3>
+<p class="muted">ルートとは別に、方面ごとの運転ルールを残します。ここも記録であり、地図への強制指示にはなりません。</p>
+<div id="rulesList"></div>
 </div>
-</section>
-
-<section id="planner" class="hidden">
-<div class="panel">
-<h3>出発時刻を逆算</h3>
-<label>出発拠点（端末内保存）</label>
-<input id="origin" placeholder="出発住所" autocomplete="off">
-<label>目的地</label>
-<input id="destination" placeholder="施設名または住所" autocomplete="off">
-<div id="destSuggest" class="suggest hidden"></div>
-<label>到着希望日</label>
-<input id="arrivalDate" type="date">
-<label>到着希望時刻</label>
-<input id="arrivalTime" type="time" value="18:00">
-<label>予測走行時間（分）※手入力</label>
-<input id="driveMinutes" type="number" min="1" placeholder="Googleマップで確認した時間" inputmode="numeric">
-<label>余裕時間</label>
-<select id="bufferMinutes">
-<option value="0">急ぎ 0分</option>
-<option value="10" selected>通常 10分</option>
-<option value="20">余裕あり 20分</option>
-<option value="30">かなり余裕 30分</option>
-</select>
-<button type="button" class="primary" onclick="calculateDeparture()">出発時刻を計算</button>
-<button type="button" onclick="plannerMap()">Googleマップで所要時間を確認</button>
-<div id="departureResult" class="panel muted">到着日時と予測走行時間を入力してください。</div>
-<p class="muted">交通状況は自動取得していません。Googleマップで所要時間を確認して入力してください。経由地指定で右左折を強制することはできません。</p>
-</div>
-</section>
-
-<section id="rules" class="hidden">
-<div class="panel">
-<h3>運転のこだわり・指示を登録</h3>
-<label>適用方面</label>
-<input id="ruleArea" placeholder="全方面／新宿方面" autocomplete="off">
-<label>道路・交差点</label>
+<details class="panel" id="ruleEditor">
+<summary>運転ルールを追加</summary>
+<label for="ruleArea">適用方面</label>
+<input id="ruleArea" placeholder="全方面、または方面名" autocomplete="off">
+<label for="rulePoint">道路・交差点</label>
 <input id="rulePoint" autocomplete="off">
-<label>優先度</label>
+<div class="pair">
+<div>
+<label for="ruleLevel">優先度</label>
 <select id="ruleLevel">
 <option value="must">必ず通る</option>
 <option value="prefer">優先</option>
 <option value="avoid">回避</option>
 <option value="caution">注意</option>
 </select>
-<label>曲がり方</label>
+</div>
+<div>
+<label for="ruleTurn">曲がり方</label>
 <select id="ruleTurn">
 <option value="">指定なし</option>
 <option>右折</option>
 <option>左折</option>
 <option>直進</option>
 </select>
-<label>時間帯</label>
+</div>
+</div>
+<label for="ruleTime">時間帯</label>
 <select id="ruleTime">
 <option>いつでも</option>
 <option>朝</option>
@@ -234,82 +323,50 @@ label{font-size:13px;color:#b3c3da}
 <option>夕方</option>
 <option>夜</option>
 </select>
-<label>理由・注意点</label>
+<label for="ruleMemo">理由・注意点</label>
 <textarea id="ruleMemo"></textarea>
 <button type="button" class="primary" onclick="addRule()">ルールを保存</button>
-</div>
-<div class="panel">
-<h3>登録済みの運転ルール</h3>
-<div id="rulesList"></div>
-</div>
-</section>
-
-<section id="parking" class="hidden">
-<div class="panel">
-<h3>乗降・駐車アシスタント</h3>
-<p class="muted">安全に降車できる場所と、駐車場の候補を記録。料金は確認日時付きの参考情報です。</p>
-<label>対象施設名</label>
-<input id="parkPlace" placeholder="施設検索で選択、または入力" autocomplete="off">
-<div id="parkSuggest" class="suggest hidden"></div>
-<label>施設の住所（任意）</label>
-<input id="parkAddress" placeholder="ナビの目的地に利用" autocomplete="off">
-<label>安全な乗降位置・徒歩案内</label>
-<textarea id="dropoff" placeholder="例：施設の正面車寄せ。入口は右側。停車規制を現地確認"></textarea>
-<label>乗降場所の確認状況</label>
-<select id="dropStatus">
-<option>要現地確認</option>
-<option>現地確認済み</option>
-<option>利用不可</option>
-</select>
-<label>駐車場名</label>
-<input id="parkName" placeholder="例：〇〇パーキング" autocomplete="off">
-<label>駐車場住所</label>
-<input id="parkLocation" placeholder="正確な入口の住所" autocomplete="off">
-<label>用途</label>
-<select id="parkMode">
-<option value="cheap">節約候補</option>
-<option value="fast">急ぎ候補</option>
-<option value="both">両方</option>
-</select>
-<label>参考料金（円）</label>
-<input id="parkPrice" type="number" min="0" placeholder="例：1200" inputmode="numeric">
-<label>料金の対象時間（分）</label>
-<input id="parkDuration" type="number" min="1" value="120" inputmode="numeric">
-<label>料金確認日</label>
-<input id="parkChecked" type="date">
-<label>入庫・徒歩の注意点</label>
-<textarea id="parkMemo" placeholder="入口の向き、車高制限、徒歩時間、満車時の代替案"></textarea>
-<button type="button" class="primary" onclick="saveParking()">乗降・駐車情報を保存</button>
-<p class="muted">※路上での違法な駐停車を推奨しません。停車規制、歩行者の安全、施設の許可を優先してください。</p>
-</div>
-<div class="panel">
-<h3>登録済みの乗降・駐車情報</h3>
-<input id="parkSearch" placeholder="施設・駐車場名で絞り込み" autocomplete="off" oninput="renderParking()">
-<div id="parkingList"></div>
-</div>
-<div class="panel">
-<h3>PPPark!で新しい候補を探す</h3>
-<p class="muted">外部アプリへの自動住所引き継ぎは未確認。下のボタンは公式検索サイトを開きます。iPhoneのPPPark!アプリでも同じ施設名を検索してください。</p>
-<button type="button" onclick="openUrl('https://pppark.com/')">PPPark!検索サイトを開く ↗</button>
-</div>
+</details>
 </section>
 
 <section id="data" class="hidden">
 <div class="panel">
-<h3>非公開施設リストの取り込み</h3>
-<p class="muted">別ファイルのJSONを選んで読み込み。アプリに施設データは埋め込まれていない。</p>
-<input type="file" id="file" accept=".json,application/json,text/json,text/plain,.txt">
-<button type="button" onclick="importFile()">取り込む</button>
+<h3>アプリの状態</h3>
+<p id="dataCounts" class="muted"></p>
+<p id="diagnostics" class="muted"></p>
+<p class="muted">データはこの端末だけに保存します。サーバーへは送りません。画面のキャッシュはアプリのファイルだけで、入力した内容は入れません。</p>
 </div>
 <div class="panel">
-<h3>バックアップ</h3>
-<button type="button" class="primary" onclick="backup()">全データを書き出す</button>
+<h3>非公開施設リストの取り込み</h3>
+<p class="muted">施設だけのJSONを追加します。同じ名前と住所は重複しません。今のルートやルールは残ります。バックアップ一式は下の復元を使ってください。</p>
+<input type="file" id="file" accept=".json,application/json,text/json,text/plain,.txt">
+<button type="button" onclick="importFile('file','places')">施設リストを取り込む</button>
+</div>
+<div class="panel">
+<h3>バックアップを復元</h3>
+<p class="muted">施設・ルート・ルール・乗降を含むJSONで、今のデータを置き換えます。実行前に件数を確認します。</p>
+<input type="file" id="restoreFile" accept=".json,application/json,text/json,text/plain,.txt">
+<button type="button" onclick="importFile('restoreFile','restore')">バックアップを復元</button>
+</div>
+<div class="panel">
+<h3>バックアップを書き出す</h3>
+<button type="button" class="primary" onclick="backup()">JSONファイルを保存</button>
 <button type="button" onclick="copyBackup()">JSONをコピー</button>
-<p id="backupMsg" class="muted">施設・ルート・運転ルールはこの端末の中だけに保存します。サーバーへは送りません。定期的にバックアップしてください。iPhoneで保存が始まらないときは「JSONをコピー」するか、下のテキストを長押ししてコピーしてください。画面用のキャッシュはアプリのファイルだけで、入力したデータは入れません。</p>
+<button type="button" class="ghost" onclick="revealBackup()">内容を表示</button>
+<p id="backupMsg" class="muted">iPhoneで保存が始まらないときは「JSONをコピー」するか、内容を表示して長押しでコピーしてください。</p>
+<details id="backupView">
+<summary>書き出したJSON</summary>
 <textarea id="backupText" readonly class="hidden" rows="8" spellcheck="false"></textarea>
+</details>
 </div>
 <div class="panel muted">非公開の会食相手・日程・移動履歴は登録しないでください。Googleマップ起動時には指定した住所・経由地がGoogleへ送信されます。停車や進入は現地規制を優先してください。経由地指定は走行道路の完全固定ではありません。</div>
 </section>
+<nav class="tabbar">
+<button type="button" data-screen="home" class="primary" onclick="tab('home')">ホーム</button>
+<button type="button" data-screen="places" onclick="tab('places')">施設</button>
+<button type="button" data-screen="routes" onclick="tab('routes')">ルート</button>
+<button type="button" data-screen="data" onclick="tab('data')">データ</button>
+</nav>
 
 <script>
 (function () {
@@ -344,6 +401,7 @@ var db = {places: [], routes: [], rules: [], parking: [], origin: ''};
 var draftPoints = [];
 var draftAvoids = [];
 var editingRouteId = '';
+var editingPlaceId = '';
 var nidSeq = 0;
 var STORAGE_KEY = 'poli-route-v5';
 var MAP_WAYPOINTS = 3;
@@ -451,6 +509,27 @@ function normalizePriority(priority) {
 function priorityLabel(priority) {
   return normalizePriority(priority) === 'must' ? '必須' : '優先';
 }
+function turnText(turn) {
+  var t = asText(turn).trim();
+  if (t === '右折') return '↱ 右折';
+  if (t === '左折') return '↰ 左折';
+  if (t === '直進') return '↑ 直進';
+  if (t === '通過') return '● 通過';
+  return t;
+}
+function priorityChip(priority) {
+  var must = normalizePriority(priority) === 'must';
+  return '<span class="chip ' + (must ? 'must' : 'prefer') + '">' + (must ? '必須' : '優先') + '</span>';
+}
+function levelChip(level) {
+  var cls = level === 'must' ? 'must' : level === 'avoid' ? 'avoid' : level === 'caution' ? 'warnchip' : 'prefer';
+  return '<span class="chip ' + cls + '">' + esc(levelLabel(level)) + '</span>';
+}
+function modeChip(mode) {
+  var label = modeLabel(mode);
+  var cls = mode === 'fast' ? 'fast' : mode === 'cheap' ? 'cheap' : 'prefer';
+  return '<span class="chip ' + cls + '">' + esc(label) + '</span>';
+}
 function normalizePoint(p) {
   if (typeof p === 'string') {
     var text = p.trim();
@@ -523,14 +602,32 @@ function normalizeParking(p) {
   if (!o.place && !o.name && !o.dropoff && !o.location) return null;
   return o;
 }
+function screenName(t) {
+  if (t === 'places' || t === 'parking') return 'places';
+  if (t === 'routes' || t === 'rules') return 'routes';
+  if (t === 'data') return 'data';
+  return 'home';
+}
 function tab(t) {
-  var names = ['today', 'places', 'routes', 'planner', 'rules', 'parking', 'data'];
+  var name = screenName(t);
+  var names = ['home', 'places', 'routes', 'data'];
   for (var i = 0; i < names.length; i++) {
     var el = $(names[i]);
-    if (el) el.classList.toggle('hidden', names[i] !== t);
+    if (el) el.classList.toggle('hidden', names[i] !== name);
   }
-  var buttons = document.querySelectorAll('nav button');
-  for (var j = 0; j < buttons.length; j++) buttons[j].classList.toggle('primary', names[j] === t);
+  var buttons = document.querySelectorAll('.tabbar button');
+  for (var j = 0; j < buttons.length; j++) {
+    buttons[j].classList.toggle('primary', buttons[j].getAttribute('data-screen') === name);
+  }
+  if (t === 'parking') {
+    var park = $('parkEditor');
+    if (park) park.open = true;
+  }
+  if (t === 'rules') {
+    var ruleBox = $('ruleEditor');
+    if (ruleBox) ruleBox.open = true;
+  }
+  try { window.scrollTo(0, 0); } catch (e) {}
 }
 function persist() {
   try {
@@ -584,22 +681,48 @@ function render() {
     if (!p) return false;
     return [p.name, p.address, p.ward, p.memo].join(' ').toLowerCase().includes(q);
   });
-  countEl.textContent = places.length + '件登録 / ' + list.length + '件一致（先頭40件）';
+  countEl.textContent = places.length + '件登録 / ' + list.length + '件一致';
   listEl.innerHTML = list.slice(0, 40).map(function (p) {
     var where = [p.ward, p.address].filter(Boolean).join(' ');
-    return '<div class="item"><b>' + esc(p.name) + '</b><p class="muted">' + esc(where) + '<br>' + esc(p.memo) + '</p><div class="buttons">' +
-      htmlBtn('place-nav', p.id, 'Googleマップ') +
-      htmlBtn('place-route', p.id, 'ルート作成') +
+    var linked = parkingArray().filter(function (row) { return row && asText(row.place) === asText(p.name); });
+    var parkLine = linked.length ? linked.slice(0, 2).map(function (row) {
+      return modeChip(row.mode) + esc(row.name || row.dropoff || '記録');
+    }).join(' ') : '<span class="muted">乗降・駐車：未登録</span>';
+    return '<div class="item"><b>' + esc(p.name) + '</b><p class="muted">' + esc(where || '住所：未登録') + '</p>' +
+      (p.memo ? '<p class="muted clamp">' + esc(p.memo) + '</p>' : '') +
+      '<p class="muted">' + parkLine + '</p><div class="buttons">' +
+      htmlBtn('place-edit', p.id, '編集') +
+      htmlBtn('place-del', p.id, '削除') +
       htmlBtn('place-park', p.id, '乗降・駐車') +
-      htmlBtn('place-edit', p.id, '車寄せメモ編集') +
+      htmlBtn('place-route', p.id, 'ルート') +
+      htmlBtn('place-nav', p.id, '地図') +
       '</div></div>';
-  }).join('') || '<p class="muted">該当なし。データ管理から施設JSONを読み込めます。</p>';
+  }).join('') || '<p class="muted">該当なし</p>';
+}
+function setPlaceSaveLabel() {
+  var b = $('placeSave');
+  if (b) b.textContent = editingPlaceId ? '施設を更新' : '施設を保存';
+}
+function clearPlaceForm() {
+  editingPlaceId = '';
+  ['pn', 'pa', 'pm'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+  setPlaceSaveLabel();
 }
 function addPlace() {
   if (!v('pn')) return alert('施設名を入力');
-  db.places.unshift({id: nid('p'), name: v('pn'), address: v('pa'), ward: '', memo: v('pm')});
+  var updated = false;
+  if (editingPlaceId) {
+    var current = db.places.find(function (item) { return item && String(item.id) === String(editingPlaceId); });
+    if (current) {
+      current.name = v('pn');
+      current.address = v('pa');
+      current.memo = v('pm');
+      updated = true;
+    }
+  }
+  if (!updated) db.places.unshift({id: nid('p'), name: v('pn'), address: v('pa'), ward: '', memo: v('pm')});
   if (persist()) {
-    ['pn', 'pa', 'pm'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+    clearPlaceForm();
     render();
     refreshTodayPlaces();
   }
@@ -619,16 +742,40 @@ function makeRoute(id) {
 function editPlace(id) {
   var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
   if (!p) return;
-  var x = prompt('車寄せ・進入方向・注意点', p.memo || '');
-  if (x !== null) { p.memo = x; persist(); render(); }
+  editingPlaceId = String(p.id);
+  if ($('pn')) $('pn').value = p.name || '';
+  if ($('pa')) $('pa').value = p.address || '';
+  if ($('pm')) $('pm').value = p.memo || '';
+  setPlaceSaveLabel();
+  var form = $('placeEditor');
+  if (form) form.open = true;
+  tab('places');
+  if (form && form.scrollIntoView) {
+    try { form.scrollIntoView({block: 'start'}); } catch (e) { form.scrollIntoView(); }
+  }
+}
+function deletePlace(id) {
+  var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
+  if (!p) return;
+  if (!confirm('「' + (p.name || 'この施設') + '」を削除しますか？ルートと乗降の記録は残ります。')) return;
+  db.places = db.places.filter(function (item) { return item && String(item.id) !== String(id); });
+  if (String(editingPlaceId) === String(id)) clearPlaceForm();
+  persist();
+  render();
+  refreshTodayPlaces();
 }
 function parkingForPlace(id) {
   var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
   if (!p) return;
-  tab('parking');
   if ($('parkPlace')) $('parkPlace').value = p.name;
   if ($('parkAddress')) $('parkAddress').value = placeAddress(p);
+  var form = $('parkEditor');
+  if (form) form.open = true;
+  tab('parking');
   renderParking();
+  if (form && form.scrollIntoView) {
+    try { form.scrollIntoView({block: 'start'}); } catch (e) { form.scrollIntoView(); }
+  }
 }
 function setRouteSaveLabel() {
   var b = $('routeSave');
@@ -642,7 +789,7 @@ function renderDraftPoints() {
     return;
   }
   box.innerHTML = draftPoints.map(function (p, i) {
-    return '<div class="item"><b>' + (i + 1) + '. ' + esc(p.place) + '</b><p class="muted">' + esc(p.turn) + ' / ' + esc(priorityLabel(p.priority)) + '</p><div class="buttons">' +
+    return '<div class="item">' + priorityChip(p.priority) + '<b>' + (i + 1) + '. ' + esc(p.place) + '</b><p class="muted">' + esc(turnText(p.turn)) + '</p><div class="buttons">' +
       htmlBtn('point-up', i, '上へ') +
       htmlBtn('point-down', i, '下へ') +
       htmlBtn('point-del', i, '削除') +
@@ -730,7 +877,7 @@ function clearRouteForm() {
 function routeDetailHtml(r) {
   var pts = pointsFromRoute(r);
   var lines = pts.map(function (p, i) {
-    return esc((i + 1) + '. ' + p.place + '（' + p.turn + '・' + priorityLabel(p.priority) + '）');
+    return priorityChip(p.priority) + esc((i + 1) + '. ' + p.place + '　' + turnText(p.turn));
   }).join('<br>');
   var avoids = (Array.isArray(r.avoids) ? r.avoids : []).map(function (a) {
     return esc(a.road + (a.reason ? '（' + a.reason + '）' : ''));
@@ -773,7 +920,13 @@ function addRoute() {
 function renderRoutes() {
   var box = $('routesList');
   if (!box) return;
-  var routes = Array.isArray(db.routes) ? db.routes : [];
+  var q = v('routeSearch').toLowerCase();
+  var routes = (Array.isArray(db.routes) ? db.routes : []).filter(function (r) {
+    if (!q || !r) return !!r;
+    var pts = pointsFromRoute(r).map(function (p) { return p.place; }).join(' ');
+    var avoids = (Array.isArray(r.avoids) ? r.avoids : []).map(function (a) { return asText(a.road) + asText(a.reason); }).join(' ');
+    return [r.name, r.from, r.to, r.memo, pts, avoids].join(' ').toLowerCase().indexOf(q) !== -1;
+  });
   box.innerHTML = routes.map(function (r) {
     return '<div class="item"><b>' + esc(r.name) + '</b><p class="muted">' + routeDetailHtml(r) + '</p><div class="buttons">' +
       htmlBtn('route-nav', r.id, 'Googleマップ') +
@@ -805,8 +958,9 @@ function editRoute(id) {
   renderDraftPoints();
   renderDraftAvoids();
   setRouteSaveLabel();
-  tab('routes');
   var form = $('routeEditor');
+  if (form) form.open = true;
+  tab('routes');
   if (form && form.scrollIntoView) {
     try { form.scrollIntoView({behavior: 'smooth', block: 'start'}); } catch (e) { form.scrollIntoView(); }
   }
@@ -817,17 +971,30 @@ function delRoute(id) {
   persist();
   renderRoutes();
 }
-function applyImportedData(o) {
+function applyImportedData(o, mode) {
   if (!o || typeof o !== 'object') throw new Error('JSONの形式が正しくありません');
-  if (Array.isArray(o.routes) && Array.isArray(o.places)) {
+  mode = mode || 'auto';
+  var full = !Array.isArray(o) && Array.isArray(o.places) && Array.isArray(o.routes);
+  if (mode === 'places' && full) {
+    alert('このファイルはバックアップです。「バックアップを復元」を使ってください');
+    return false;
+  }
+  if (mode === 'restore' && !full) {
+    alert('バックアップ形式ではありません。施設とルートを含むJSONを選んでください');
+    return false;
+  }
+  if (full && mode !== 'places') {
     var placeCount = o.places.length;
     var routeCount = o.routes.length;
+    var ruleCount = Array.isArray(o.rules) ? o.rules.length : db.rules.length;
+    var parkCount = Array.isArray(o.parking) ? o.parking.length : (Array.isArray(db.parking) ? db.parking.length : 0);
     var hasNow = db.places.length || db.routes.length || db.rules.length || (Array.isArray(db.parking) && db.parking.length);
     if (!placeCount && !routeCount && hasNow) {
       alert('中身が空のファイルでは、今のデータを置き換えません');
       return false;
     }
-    if (!confirm('今のデータを置き換えます。施設' + db.places.length + '件・ルート' + db.routes.length + '件が、ファイルの施設' + placeCount + '件・ルート' + routeCount + '件になります。先にバックアップしてください。置き換えますか？')) return false;
+    var nowPark = Array.isArray(db.parking) ? db.parking.length : 0;
+    if (!confirm('今のデータを置き換えます。現在は施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + nowPark + 'です。ファイルは施設' + placeCount + '・ルート' + routeCount + '・ルール' + ruleCount + '・乗降駐車' + parkCount + 'です。先にバックアップしてください。置き換えますか？')) return false;
     db = {
       places: o.places.map(normalizePlace).filter(Boolean),
       routes: o.routes.map(normalizeRoute).filter(Boolean),
@@ -874,16 +1041,22 @@ function refreshAllViews() {
   renderRules();
   renderParking();
   refreshTodayPlaces();
+  renderDataCounts();
 }
-async function importFile() {
-  var input = $('file');
+function renderDataCounts() {
+  var el = $('dataCounts');
+  if (!el) return;
+  el.textContent = '施設 ' + db.places.length + ' / ルート ' + db.routes.length + ' / ルール ' + db.rules.length + ' / 乗降・駐車 ' + parkingArray().length;
+}
+async function importFile(inputId, mode) {
+  var input = $(inputId || 'file');
   var f = input && input.files && input.files[0];
   if (!f) return alert('JSONファイルを選択');
   var snapshot = JSON.parse(JSON.stringify(db));
   try {
     var text = await readFileText(f);
     var o = JSON.parse(String(text).replace(/^\uFEFF/, '').trim());
-    if (!applyImportedData(o)) return;
+    if (!applyImportedData(o, mode || 'auto')) return;
     if (!persist()) {
       db = snapshot;
       refreshAllViews();
@@ -907,14 +1080,27 @@ function backupJson() {
 }
 function showBackupText(json) {
   var box = $('backupText');
+  var wrap = $('backupView');
   if (!box) return;
   box.value = json;
   box.classList.remove('hidden');
+  if (wrap) wrap.open = true;
+}
+function revealBackup() {
+  var box = $('backupText');
+  var wrap = $('backupView');
+  if (box && box.value && wrap && wrap.open) {
+    wrap.open = false;
+    return;
+  }
+  try { showBackupText(backupJson()); }
+  catch (e) { alert('書き出しエラー：' + (e && e.message ? e.message : '不明')); }
 }
 function backup() {
   var json;
   try { json = backupJson(); }
   catch (e) { alert('書き出しエラー：' + e.message); return; }
+  var saved = false;
   try {
     var blob = new Blob([json], {type: 'application/json'});
     var url = URL.createObjectURL(blob);
@@ -927,12 +1113,15 @@ function backup() {
     a.click();
     if (a.parentNode) a.parentNode.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    saved = true;
   } catch (e) {
+    showBackupText(json);
     alert('ファイル保存を開始できませんでした。表示されたJSONを長押ししてコピーしてください');
   }
-  showBackupText(json);
   var msg = $('backupMsg');
-  if (msg) msg.textContent = '端末への保存を開始しました。始まらない場合は「JSONをコピー」を使うか、下のテキストを長押ししてコピーしてください。';
+  if (msg) msg.textContent = saved
+    ? '端末への保存を開始しました。始まらない場合は「JSONをコピー」か「内容を表示」を使ってください。'
+    : 'ファイル保存を開始できませんでした。表示されたJSONを長押ししてコピーしてください。';
   setState('バックアップを作成しました（端末内）');
 }
 function copyBackup() {
@@ -1050,6 +1239,7 @@ function onActionClick(e) {
     else if (act === 'place-route') makeRoute(id);
     else if (act === 'place-park') parkingForPlace(id);
     else if (act === 'place-edit') editPlace(id);
+    else if (act === 'place-del') deletePlace(id);
     else if (act === 'route-nav') navRoute(id);
     else if (act === 'route-edit') editRoute(id);
     else if (act === 'route-del') delRoute(id);
@@ -1105,9 +1295,9 @@ function renderRules() {
   if (!box) return;
   var rules = Array.isArray(db.rules) ? db.rules : [];
   box.innerHTML = rules.map(function (r) {
-    return '<div class="item"><b>' + esc(r.point) + '</b> ' + esc(r.turn) +
-      '<p class="muted">' + esc(r.area) + ' / ' + esc(levelLabel(r.level)) + ' / ' + esc(r.time) + '<br>' + esc(r.memo) + '</p>' +
-      htmlBtn('rule-edit', r.id, '編集') + ' ' + htmlBtn('rule-del', r.id, '削除') + '</div>';
+    return '<div class="item">' + levelChip(r.level) + '<b>' + esc(r.point) + '</b> ' + esc(turnText(r.turn)) +
+      '<p class="muted">' + esc(r.area) + ' / ' + esc(r.time || 'いつでも') + (r.memo ? ' / ' + esc(r.memo) : '') + '</p><div class="buttons">' +
+      htmlBtn('rule-edit', r.id, '編集') + htmlBtn('rule-del', r.id, '削除') + '</div></div>';
   }).join('') || '<p class="muted">ルールはまだありません。</p>';
 }
 function editRule(id) {
@@ -1191,9 +1381,9 @@ function renderParking() {
   });
   box.innerHTML = rows.map(function (p) {
     var price = (p.price !== '' && p.price != null) ? (esc(p.price) + '円 / ' + esc(p.duration || '?') + '分') : '未登録';
-    return '<div class="item"><b>' + esc(p.place) + '</b><p class="muted">乗降：' + esc(p.dropoff || '未登録') + '（' + esc(p.status) + '）<br>駐車：' +
-      esc(p.name || '未登録') + ' / ' + esc(modeLabel(p.mode)) + '<br>' + esc(p.location) + '<br>参考料金：' + price +
-      '　確認日：' + esc(p.checked || '不明') + '<br>' + esc(p.memo) + '</p><div class="buttons">' +
+    return '<div class="item">' + modeChip(p.mode) + '<b>' + esc(p.place) + '</b><p class="muted">乗降：' + esc(p.dropoff || '未登録') + '（' + esc(p.status || '未登録') + '）<br>駐車：' +
+      esc(p.name || '未登録') + (p.location ? ' / ' + esc(p.location) : '') + '<br>参考料金：' + price +
+      '　確認日：' + esc(p.checked || '未登録') + (p.memo ? '<br>' + esc(p.memo) : '') + '</p><div class="buttons">' +
       htmlBtn('park-nav', p.id, '駐車場へナビ') +
       htmlBtn('park-edit', p.id, '編集') +
       htmlBtn('park-del', p.id, '削除') +
@@ -1332,6 +1522,7 @@ function addTimeGrid(root, depart, arrive, buffer) {
   grid.className = 'times';
   [['出発', depart], ['到着', arrive], ['余裕', buffer]].forEach(function (pair) {
     var cell = document.createElement('div');
+    if (pair[0] === '出発') cell.className = pair[1] === '未登録' ? 'depart is-empty' : 'depart';
     var label = document.createElement('span');
     label.textContent = pair[0];
     var val = document.createElement('b');
@@ -1350,7 +1541,7 @@ function addSteps(parent, points) {
   var ol = document.createElement('ol');
   points.forEach(function (p) {
     var li = document.createElement('li');
-    li.textContent = p.place + '　' + (p.turn || '通過') + '（' + priorityLabel(p.priority) + '）';
+    li.textContent = p.place + '　' + turnText(p.turn) + '（' + priorityLabel(p.priority) + '）';
     ol.appendChild(li);
   });
   parent.appendChild(ol);
@@ -1446,38 +1637,44 @@ function buildToday() {
   addTimeGrid(root, departText, arriveText, buffer + '分');
   addBlock(root, 'p', '到着日 ' + d + ' / 時間帯 ' + (band || '未登録') + ' / 走行時間（手入力）：' + (driveOk ? drive + '分' : '未登録'), 'muted');
   addBlock(root, 'p', '出発時刻は手入力の走行時間からの逆算です。交通予測ではありません。規制と一方通行は未確認で、安全は保証しません。', 'warn');
+  var gaps = [];
   addBlock(root, 'h3', '目的地');
   if (place) {
-    addBlock(root, 'p', asText(place.name) || destQuery);
-    addBlock(root, 'p', '住所：' + (asText(place.address).trim() || '未登録'), 'muted');
+    var addr = asText(place.address).trim();
+    addBlock(root, 'p', (asText(place.name) || destQuery) + (addr ? '　' + addr : ''));
+    if (!addr) gaps.push('住所');
     if (asText(place.memo).trim()) addBlock(root, 'p', '施設メモ：' + place.memo, 'muted');
   } else {
     addBlock(root, 'p', destQuery);
-    addBlock(root, 'p', '施設マスター：未登録', 'muted');
-    addBlock(root, 'p', '住所：未登録', 'muted');
+    gaps.push('施設マスター');
+    gaps.push('住所');
   }
-  addBlock(root, 'p', '方面：' + (areas.length ? areas.join('、') : '未登録'), 'muted');
-  addBlock(root, 'p', '出発地：' + (origin || '未登録'), 'muted');
+  if (areas.length) addBlock(root, 'p', '方面：' + areas.join('、'), 'muted');
+  else gaps.push('方面');
+  if (origin) addBlock(root, 'p', '出発地：' + origin, 'muted');
+  else gaps.push('出発地');
   var dropoffs = m.parking.filter(function (p) { return asText(p.dropoff).trim() && asText(p.status) !== '利用不可'; });
   var blockedDropoffs = m.parking.filter(function (p) { return asText(p.dropoff).trim() && asText(p.status) === '利用不可'; });
-  addBlock(root, 'h3', '乗降場所');
-  if (!dropoffs.length) addBlock(root, 'p', '未登録', 'muted');
-  dropoffs.forEach(function (p) {
-    addBlock(root, 'p', p.dropoff + '（' + (asText(p.status).trim() || '確認状況：未登録') + '）', 'line');
-  });
+  if (dropoffs.length) {
+    addBlock(root, 'h3', '乗降場所');
+    dropoffs.forEach(function (p) {
+      addBlock(root, 'p', p.dropoff + '（' + (asText(p.status).trim() || '確認状況：未登録') + '）', 'line');
+    });
+  } else gaps.push('乗降場所');
   blockedDropoffs.forEach(function (p) {
     addBlock(root, 'p', '利用不可の記録：' + p.dropoff, 'warn');
   });
-  addBlock(root, 'h3', candidates.length > 1 ? 'ルート候補の比較' : 'ルート');
-  if (candidates.length > 1) addBlock(root, 'p', '複数あるため、必須地点・優先・回避を並べています。自動では1本に決めません。', 'muted');
-  if (!candidates.length) addBlock(root, 'p', '未登録', 'muted');
+  if (candidates.length) {
+    addBlock(root, 'h3', candidates.length > 1 ? 'ルート候補の比較' : 'ルート');
+    if (candidates.length > 1) addBlock(root, 'p', '複数あるため、必須地点・優先・回避を並べています。自動では1本に決めません。', 'muted');
+  } else gaps.push('ルート');
   candidates.forEach(function (route) {
     var card = document.createElement('div');
     card.className = 'plan-card';
     root.appendChild(card);
     var points = pointsFromRoute(route);
     var mustPts = points.filter(function (p) { return p.priority === 'must'; }).map(function (p) { return p.place; });
-    var preferPts = points.filter(function (p) { return p.priority !== 'must'; }).map(function (p) { return p.place + '（' + p.turn + '）'; });
+    var preferPts = points.filter(function (p) { return p.priority !== 'must'; }).map(function (p) { return p.place + '（' + turnText(p.turn) + '）'; });
     var avoids = (Array.isArray(route.avoids) ? route.avoids : []).map(function (a) {
       return asText(a.road).trim() + (asText(a.reason).trim() ? '（' + a.reason + '）' : '');
     }).filter(Boolean);
@@ -1486,10 +1683,12 @@ function buildToday() {
     var missing = missingMustRules(route, mustRules);
     var routeTime = asText(route.time).trim();
     addBlock(card, 'p', (route.name || '名称未登録') + ' / ' + (routeTime || '時間帯：未登録'));
-    addBlock(card, 'p', '必須地点：' + (mustPts.length ? joinLabels(mustPts) : '未登録'), 'muted');
-    addBlock(card, 'p', '優先地点：' + (preferPts.length ? joinLabels(preferPts) : '未登録'), 'muted');
-    addBlock(card, 'p', '優先道路：' + (preferRoads.length ? joinLabels(preferRoads) : '未登録'), 'muted');
-    addBlock(card, 'p', '回避道路：' + (avoidRoads.length ? joinLabels(avoidRoads) : '未登録'), 'muted');
+    var compare = [];
+    if (mustPts.length) compare.push('必須 ' + joinLabels(mustPts));
+    if (preferPts.length) compare.push('優先 ' + joinLabels(preferPts));
+    if (preferRoads.length) compare.push('優先道路 ' + joinLabels(preferRoads));
+    if (avoidRoads.length) compare.push('回避 ' + joinLabels(avoidRoads));
+    addBlock(card, 'p', compare.length ? compare.join(' / ') : '必須・優先・回避：未登録', 'muted');
     if (origin && !asText(route.from).trim()) addBlock(card, 'p', 'このルートの出発地は未登録です。', 'muted');
     missing.forEach(function (rule) {
       addBlock(card, 'p', '必須地点「' + rule.point + '」がこのルートの通過地点に入っていません。記録の不足であり、規制の判定ではありません。', 'warn');
@@ -1501,21 +1700,20 @@ function buildToday() {
     var btn = addBlock(card, 'button', 'このルートでGoogleマップを開く');
     btn.onclick = function () { openCandidate(route); };
   });
-  function addParkingGroup(title, rows) {
-    addBlock(root, 'h3', title);
+  function addParkingGroup(title, rows, gapLabel) {
     if (!rows.length) {
-      addBlock(root, 'p', '未登録', 'muted');
+      gaps.push(gapLabel);
       return;
     }
+    addBlock(root, 'h3', title);
     rows.forEach(function (p) {
       var card = document.createElement('div');
       card.className = 'plan-card';
       root.appendChild(card);
       addBlock(card, 'p', asText(p.name).trim() || '駐車場名：未登録');
       addBlock(card, 'p', '住所：' + (asText(p.location).trim() || asText(p.address).trim() || '未登録'), 'muted');
-      addBlock(card, 'p', priceLine(p), 'muted');
+      addBlock(card, 'p', priceLine(p) + ' / 満空：未登録', 'muted');
       if (asText(p.memo).trim()) addBlock(card, 'p', p.memo, 'muted');
-      addBlock(card, 'p', '満空情報：未登録', 'muted');
       if (asText(p.name).trim() || asText(p.location).trim()) {
         var parkBtn = addBlock(card, 'button', '駐車場へナビ');
         parkBtn.onclick = function () { openParking(p.id); };
@@ -1525,19 +1723,25 @@ function buildToday() {
   var cheap = m.parking.filter(function (p) { return p.mode === 'cheap' || p.mode === 'both'; });
   var fast = m.parking.filter(function (p) { return p.mode === 'fast' || p.mode === 'both'; });
   var unknownMode = m.parking.filter(function (p) { return p.mode !== 'cheap' && p.mode !== 'fast' && p.mode !== 'both' && asText(p.name).trim(); });
-  addParkingGroup('駐車場・節約候補', cheap);
-  addParkingGroup('駐車場・急ぎ候補', fast);
+  addParkingGroup('駐車場・節約', cheap, '節約駐車場');
+  addParkingGroup('駐車場・急ぎ', fast, '急ぎ駐車場');
   if (unknownMode.length) {
     addBlock(root, 'h3', '用途未登録の駐車場');
     unknownMode.forEach(function (p) {
       addBlock(root, 'p', p.name + ' / 節約か急ぎかは未登録', 'muted');
     });
   }
-  addBlock(root, 'h3', '運転ルール');
-  if (!activeRules.length) addBlock(root, 'p', '未登録', 'muted');
+  if (activeRules.length) addBlock(root, 'h3', '運転ルール');
+  else gaps.push('運転ルール');
   activeRules.slice(0, 12).forEach(function (rule) {
-    addBlock(root, 'p', levelLabel(rule.level) + '：' + (asText(rule.point).trim() || '未登録') + ' ' + asText(rule.turn) + '（' + (asText(rule.area).trim() || '方面：未登録') + ' / ' + (asText(rule.time).trim() || '時間帯：未登録') + '）', 'line');
+    addBlock(root, 'p', levelLabel(rule.level) + '：' + (asText(rule.point).trim() || '地点未登録') + ' ' + turnText(rule.turn) + '（' + (asText(rule.area).trim() || '方面未登録') + '）', 'line');
   });
+  if (gaps.length) {
+    var gapBox = document.createElement('p');
+    gapBox.className = 'gaps';
+    gapBox.textContent = gaps.map(function (g) { return g + '：未登録'; }).join('　');
+    root.appendChild(gapBox);
+  }
   if (excluded.length) {
     addBlock(root, 'h3', '今回の条件では出していないルート');
     excluded.forEach(function (item) {
@@ -1585,6 +1789,7 @@ function boot() {
     safeCall(renderDraftAvoids);
     safeCall(renderRules);
     safeCall(renderParking);
+    safeCall(renderDataCounts);
     safeCall(initToday);
     var diagOk = false;
     try { diagOk = runDiagnostics(); }
