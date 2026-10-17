@@ -179,6 +179,7 @@ details.panel>summary{margin:-2px 0 4px}
 <h2>設定</h2>
 <p class="muted">施設、運転ルール、取り込み、バックアップ、診断です。ここを開いても権限は変わりません。</p>
 <p id="dataCounts" class="muted"></p>
+<div class="panel" style="margin:10px 0;padding:12px"><strong>保存先の確認（診断）</strong><p class="muted" id="storageContext">確認中</p><button type="button" onclick="checkStorageContext()">保存先を確認</button><p class="muted">件数と保存状態だけを表示します。施設名・住所・運転履歴は表示・送信しません。Safariとホーム画面アプリでは保存先が異なる場合があります。</p></div>
 <p id="diagnostics" class="muted"></p>
 <p class="muted">データはこの端末だけに保存します。サーバーへは送りません。位置情報は取りません。走行時間の提案は過去の実績だけで、リアルタイムの交通情報ではありません。右折・左折・必須道路はGoogleマップへ送れません。</p>
 </div>
@@ -846,16 +847,35 @@ function persist(force) {
     return false;
   }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    var serialized = JSON.stringify(db);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    if (localStorage.getItem(STORAGE_KEY) !== serialized) throw new Error('保存後の読み取りが一致しません');
     storageLocked = false;
     setState('準備OK・端末内保存');
     safeCall(renderDataCounts);
+    safeCall(checkStorageContext);
     return true;
   } catch (e) {
     setState('保存できません');
     alert('保存に失敗。SafariでHTTPSサイトとして開いてください');
     return false;
   }
+}
+function checkStorageContext() {
+  var target = $('storageContext');
+  if (!target) return;
+  var mode = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true ? 'ホーム画面アプリ' : 'ブラウザ';
+  var state = '保存データなし';
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      var parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.places) && Array.isArray(parsed.routes)) {
+        state = '保存済み：施設' + parsed.places.length + '件・ルート' + parsed.routes.length + '件・ルール' + (Array.isArray(parsed.rules) ? parsed.rules.length : 0) + '件・走行' + (Array.isArray(parsed.drives) ? parsed.drives.length : 0) + '件';
+      } else state = '保存データの形式を確認してください';
+    }
+  } catch (e) { state = '保存データを読み取れません'; }
+  target.textContent = '表示環境：' + mode + ' / 保存キー：' + STORAGE_KEY + ' / ' + state;
 }
 function withSavedChange(mutate) {
   var snapshot;
@@ -3288,6 +3308,7 @@ function boot() {
     safeCall(renderRules);
     safeCall(renderParking);
     safeCall(renderDataCounts);
+    safeCall(checkStorageContext);
     safeCall(renderDrives);
     safeCall(initToday);
     var diagOk = false;
