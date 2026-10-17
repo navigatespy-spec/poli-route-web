@@ -329,16 +329,16 @@ details.panel>summary{margin:-2px 0 4px}
 <input id="routeSearch" placeholder="ルート名・地点・道路" autocomplete="off" oninput="renderRoutes()">
 <div id="routesList"></div>
 </div>
-<details class="panel" id="runEditor">
-<summary>停車後に記録</summary>
+<div class="panel" id="runEditor">
+<h2>停車後に記録</h2>
 <p class="muted">車を停めてから残します。位置情報は取りません。走行時間は端末内だけに保存します。</p>
 <p id="driveSummary" class="muted">今日の運転でプランを作ると、出発地と目的地を引き継ぎます。</p>
 <label for="driveMinutesActual">実際の走行時間（分）</label>
 <input id="driveMinutesActual" type="number" min="1" max="1440" inputmode="numeric" placeholder="停車後に入力">
 <label for="driveMemo">メモ（任意）</label>
 <input id="driveMemo" placeholder="空欄でも保存できます" autocomplete="off">
-<details id="driveDetail">
-<summary>出発地・日時・ルートを直す</summary>
+<button type="button" id="driveDetailBtn" onclick="toggleDriveDetail()">出発地・日時・ルートを直す</button>
+<div id="driveDetail" class="hidden">
 <label for="driveOrigin">出発地</label>
 <input id="driveOrigin" autocomplete="off">
 <label for="driveDest">目的地</label>
@@ -355,7 +355,7 @@ details.panel>summary{margin:-2px 0 4px}
 </div>
 <label for="driveRoute">利用したルート</label>
 <select id="driveRoute"></select>
-</details>
+</div>
 <button type="button" class="primary" onclick="saveDriveActual()">走行時間を保存</button>
 <p id="runRouteName"></p>
 <p id="runInstructed" class="muted"></p>
@@ -368,7 +368,7 @@ details.panel>summary{margin:-2px 0 4px}
 <label for="runNext">次回の注意</label>
 <textarea id="runNext" rows="2" placeholder="なければ空欄"></textarea>
 <button type="button" class="primary" onclick="saveRunLog()">記録を保存</button>
-</details>
+</div>
 </section>
 
 <div class="admin-only hidden" id="rulesBox">
@@ -1337,12 +1337,8 @@ function openRunLog(id) {
   if ($('runRouteName')) $('runRouteName').textContent = route.name || '名称未登録';
   if ($('runInstructed')) $('runInstructed').textContent = instructedText(route);
   fillDriveForm(route.id);
-  var form = $('runEditor');
-  if (form) form.open = true;
   tab('routes');
-  if (form && form.scrollIntoView) {
-    try { form.scrollIntoView({block: 'start'}); } catch (e) { form.scrollIntoView(); }
-  }
+  revealDriveMinutes();
 }
 function saveRunLog() {
   var route = (Array.isArray(db.routes) ? db.routes : []).find(function (item) { return item && String(item.id) === String(runRouteId); });
@@ -2481,6 +2477,21 @@ function estimateDrive(destQuery, arriveAt, place) {
     low: weak || chosen.length < 3
   };
 }
+function setDriveDetailOpen(open) {
+  var box = $('driveDetail');
+  if (box) box.classList.toggle('hidden', !open);
+}
+function toggleDriveDetail() {
+  var box = $('driveDetail');
+  setDriveDetailOpen(!!(box && box.classList.contains('hidden')));
+}
+function revealDriveMinutes() {
+  var field = $('driveMinutesActual');
+  if (!field || !field.scrollIntoView) return;
+  window.setTimeout(function () {
+    try { field.scrollIntoView({block: 'center'}); } catch (e) { field.scrollIntoView(); }
+  }, 0);
+}
 function fillDriveRoutes(selectedId) {
   var sel = $('driveRoute');
   if (!sel) return;
@@ -2516,15 +2527,12 @@ function fillDriveForm(routeId) {
   var when = departAt ? departAt.replace('T', ' ') : '未定';
   var summary = $('driveSummary');
   if (summary) summary.textContent = '引き継ぎ：' + (origin || '出発地未登録') + ' → ' + (destination || '目的地未登録') + ' / 出発 ' + when + ' / ルート ' + routeName;
+  setDriveDetailOpen(!(origin && destination && parts[0] && parts[1]));
 }
 function openDriveForm() {
   fillDriveForm(lastDriveContext && lastDriveContext.routeId);
-  var form = $('runEditor');
-  if (form) form.open = true;
   tab('routes');
-  if (form && form.scrollIntoView) {
-    try { form.scrollIntoView({block: 'start'}); } catch (e) { form.scrollIntoView(); }
-  }
+  revealDriveMinutes();
 }
 function saveDriveActual() {
   var minutes = Number(v('driveMinutesActual'));
@@ -2533,9 +2541,16 @@ function saveDriveActual() {
   var origin = v('driveOrigin');
   var dateText = v('driveDate');
   var timeText = v('driveTime');
-  if (!destination) return alert('目的地を入力してください');
-  if (!origin) return alert('出発地を入力してください');
-  if (!parseLocalDateTime(dateText, timeText)) return alert('出発日時を入力してください');
+  if (!destination || !origin || !parseLocalDateTime(dateText, timeText)) {
+    setDriveDetailOpen(true);
+    var focus = $(!destination ? 'driveDest' : (!origin ? 'driveOrigin' : 'driveDate'));
+    if (focus && focus.focus) {
+      try { focus.focus(); } catch (e) {}
+    }
+    if (!destination) return alert('目的地を入力してください');
+    if (!origin) return alert('出発地を入力してください');
+    return alert('出発日時を入力してください');
+  }
   var place = findPlaceExact(destination);
   var row = normalizeDrive({
     origin: origin,
