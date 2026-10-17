@@ -285,7 +285,7 @@ details.panel>summary{margin:-2px 0 4px}
 </select>
 </div>
 </div>
-<button type="button" onclick="addDraftPoint()">地点を追加</button>
+<button type="button" onclick="addDraftPoint()">別の地点も追加する（任意）</button>
 <div id="draftPoints"></div>
 <label for="rm">次回の注意事項</label>
 <textarea id="rm" rows="2" placeholder="なければ空欄"></textarea>
@@ -1245,6 +1245,8 @@ function routeDetailHtml(r) {
     limit;
 }
 function addRoute() {
+  // A pending point is included in the same save operation. Users no longer
+  // have to press the separate add-point button for the final point.
   if (!v('rt')) return setStatus('routeStatus', false, '目的地を入力してください');
   if (!v('rn')) {
     var same = (Array.isArray(db.routes) ? db.routes : []).filter(function (item) {
@@ -1265,8 +1267,10 @@ function addRoute() {
     }
     return setStatus('routeStatus', false, '出発地を入力してください');
   }
-  absorbDraftLines();
-  var points = draftPoints.map(normalizePoint).filter(Boolean);
+  // Collect pending inputs without mutating the draft until persistence succeeds.
+  var pendingPoint = v('rp').trim();
+  var pendingLines = v('rv').split('\n').map(function (x) { return x.trim(); }).filter(Boolean);
+  var points = draftPoints.concat(pendingPoint ? [{place: pendingPoint, turn: normalizeTurn(v('rpTurn')), priority: normalizePriority(v('rpPriority'))}] : [], pendingLines.map(function (name) { return {place: name, turn: '通過', priority: 'prefer'}; })).map(normalizePoint).filter(Boolean);
   var avoids = draftAvoids.map(normalizeAvoid).filter(Boolean);
   var prefers = draftPrefers.map(normalizeAvoid).filter(Boolean);
   var existing = null;
@@ -2824,6 +2828,33 @@ function buildToday(opts) {
     else maps(mapDest, origin);
   };
   addTimeGrid(root, departText, arriveText, buffer + '分');
+  // Put the route match status immediately below the departure summary.
+  // The full route cards and explanations remain below for detailed review.
+  if (candidates.length) {
+    addBlock(root, 'p', '保存済みルート：' + candidates.length + '件が今回の条件に一致', 'note good');
+    var firstRoute = candidates[0];
+    var firstPoints = pointsFromRoute(firstRoute);
+    var firstLabel = firstPoints.slice(0, 3).map(function (p) {
+      return p.place + '（' + turnText(p.turn) + '）';
+    }).join(' → ');
+    addBlock(root, 'p', '候補：' + (firstRoute.name || '名称未登録') + (firstLabel ? ' / ' + firstLabel : ''), 'muted');
+  } else if (excluded.length) {
+    addBlock(root, 'p', '保存済みルート' + excluded.length + '件は、出発地または時間帯が一致しません。', 'warn');
+    var originMismatch = excluded.find(function (item) {
+      return item.reason === '出発地が違う' && asText(item.route.from).trim();
+    });
+    if (originMismatch) {
+      var useSavedOrigin = addBlock(root, 'button', '保存ルートの出発地で再表示');
+      useSavedOrigin.onclick = function () {
+        var field = $('todayOrigin');
+        if (!field) return;
+        field.value = asText(originMismatch.route.from).trim();
+        buildToday();
+      };
+    }
+  } else {
+    addBlock(root, 'p', 'この目的地の保存済みルートはありません。', 'muted');
+  }
   var driveLabel = mode === 'none' ? '未入力' : drive + '分';
   var driveKind = mode === 'learned' ? '過去の走行実績に基づく推定' : (mode === 'manual' ? '手入力' : '未入力');
   addBlock(root, 'p', '到着日 ' + d + ' / 時間帯 ' + (band || '未登録') + ' / 走行時間（' + driveKind + '）：' + driveLabel, 'muted');
@@ -2876,6 +2907,9 @@ function buildToday(opts) {
   blockedDropoffs.forEach(function (p) {
     addBlock(root, 'p', '利用不可の記録：' + p.dropoff, 'warn');
   });
+  if (!candidates.length && excluded.length) {
+    addBlock(root, 'p', '保存済みルートはありますが、今回の出発地・時間帯と一致しません。下の「今回の条件では出していないルート」で理由を確認してください。', 'warn');
+  }
   if (candidates.length) {
     addBlock(root, 'h3', candidates.length > 1 ? 'ルート候補の比較' : 'ルート');
     if (candidates.length > 1) addBlock(root, 'p', '複数あるため、必須地点・優先・回避を並べています。自動では1本に決めません。', 'muted');
@@ -2967,7 +3001,21 @@ function buildToday(opts) {
   if (excluded.length) {
     addBlock(root, 'h3', '今回の条件では出していないルート');
     excluded.forEach(function (item) {
-      addBlock(root, 'p', (item.route.name || '名称未登録') + '：' + item.reason, 'muted');
+      var savedFrom = asText(item.route.from).trim();
+      var savedTime = asText(item.route.time).trim() || 'いつでも';
+      var detail = (item.route.name || '名称未登録') + '：' + item.reason +
+        ' / 登録した出発地：' + (savedFrom || '未登録') + ' / 登録した時間帯：' + savedTime;
+      addBlock(root, 'p', detail, 'muted');
+      // Do not silently substitute a different origin: only use it on explicit tap.
+      if (item.reason === '出発地が違う' && savedFrom) {
+        var selectOrigin = addBlock(root, 'button', 'このルートの出発地で再表示');
+        selectOrigin.onclick = function () {
+          var field = $('todayOrigin');
+          if (!field) return;
+          field.value = savedFrom;
+          buildToday();
+        };
+      }
     });
   }
   if (!quiet) {

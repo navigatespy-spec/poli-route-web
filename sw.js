@@ -1,4 +1,4 @@
-var CACHE = 'poli-route-shell-24';
+var CACHE = 'poli-route-shell-27';
 var CACHE_PREFIX = 'poli-route-shell-';
 var SHELL = [
   './',
