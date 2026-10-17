@@ -1,4 +1,5 @@
-var CACHE = 'poli-route-shell-19';
+var CACHE = 'poli-route-shell-24';
+var CACHE_PREFIX = 'poli-route-shell-';
 var SHELL = [
   './',
   './index.html',
@@ -25,7 +26,7 @@ self.addEventListener('install', function (event) {
 self.addEventListener('activate', function (event) {
   event.waitUntil(caches.keys().then(function (keys) {
     return Promise.all(keys.filter(function (key) {
-      return key !== CACHE;
+      return key !== CACHE && key.indexOf(CACHE_PREFIX) === 0;
     }).map(function (key) {
       return caches.delete(key);
     }));

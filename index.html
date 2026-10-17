@@ -151,7 +151,7 @@ details.panel>summary{margin:-2px 0 4px}
 </select>
 <label for="todayDrive">走行時間（分）</label>
 <input id="todayDrive" type="number" min="1" placeholder="実績が足りないときだけ" inputmode="numeric">
-<p class="muted">地図で見た分数を入れると、その分数で出発時刻を逆算します。</p>
+<p class="muted">地図で見た分数を入れると、その分数が実績より優先されます。空にすると実績を使います。</p>
 </details>
 </div>
 <div id="todayResult" class="panel"><p class="muted">目的地と到着日時を入れて、運転プランを作成します。</p></div>
@@ -658,13 +658,15 @@ function placeById(id) {
 }
 function routeMatchesPlace(route, place) {
   if (!route || !place) return false;
-  if (asText(route.placeId) && asText(route.placeId) === String(place.id)) return true;
+  // Explicit links are authoritative: never attach a route to a different facility by name.
+  if (asText(route.placeId)) return asText(route.placeId) === String(place.id);
   var to = foldName(route.to);
   return !!to && placeNameKeys(place).indexOf(to) !== -1;
 }
 function parkingMatchesPlace(row, place) {
   if (!row || !place) return false;
-  if (asText(row.placeId) && asText(row.placeId) === String(place.id)) return true;
+  // Name fallback is reserved for legacy records without a facility ID.
+  if (asText(row.placeId)) return asText(row.placeId) === String(place.id);
   var name = foldName(row.place);
   return !!name && placeNameKeys(place).indexOf(name) !== -1;
 }
@@ -855,6 +857,25 @@ function persist(force) {
     return false;
   }
 }
+function withSavedChange(mutate) {
+  var snapshot;
+  try { snapshot = JSON.parse(JSON.stringify(db)); }
+  catch (e) {
+    setState('エラー：保存前の控えを作れません');
+    return false;
+  }
+  try { mutate(); }
+  catch (e) {
+    db = snapshot;
+    refreshAllViews();
+    setState('エラー：' + (e && e.message ? e.message : '保存できません'));
+    return false;
+  }
+  if (persist()) return true;
+  db = snapshot;
+  refreshAllViews();
+  return false;
+}
 function openUrl(url) {
   if (!url) return;
   var win = null;
@@ -982,35 +1003,39 @@ function addPlace() {
           : '名前が一致するルート' + links.routes.length + '件・乗降' + links.parks.length + '件・走行実績' + links.drives.length + '件に施設IDを紐づけます。中身は変えません。保存しますか？';
         if (!confirm(msg)) return;
       }
-      current.name = draft.name;
-      current.address = draft.address;
-      current.ward = draft.ward;
-      current.memo = draft.memo;
-      current.aliases = draft.aliases;
-      links.routes.forEach(function (route) {
-        route.placeId = String(current.id);
-        if (nameChanged && foldName(route.to) === foldName(oldName)) route.to = current.name;
-      });
-      links.parks.forEach(function (row) {
-        row.placeId = String(current.id);
-        if (nameChanged && foldName(row.place) === foldName(oldName)) row.place = current.name;
-      });
-      links.drives.forEach(function (row) {
-        row.placeId = String(current.id);
-        if (nameChanged && foldName(row.destination) === foldName(oldName)) row.destination = current.name;
-        if (draft.ward) row.ward = draft.ward;
-      });
       updated = true;
     }
   }
-  if (!updated) db.places.unshift({id: nid('p'), name: draft.name, address: draft.address, ward: draft.ward, memo: draft.memo, aliases: draft.aliases});
-  if (persist()) {
-    clearPlaceForm();
-    render();
-    renderRoutes();
-    renderParking();
-    refreshTodayPlaces();
-  }
+  var created = updated ? null : {id: nid('p'), name: draft.name, address: draft.address, ward: draft.ward, memo: draft.memo, aliases: draft.aliases};
+  if (!withSavedChange(function () {
+    if (!updated || !current) {
+      db.places.unshift(created);
+      return;
+    }
+    current.name = draft.name;
+    current.address = draft.address;
+    current.ward = draft.ward;
+    current.memo = draft.memo;
+    current.aliases = draft.aliases;
+    links.routes.forEach(function (route) {
+      route.placeId = String(current.id);
+      if (nameChanged && foldName(route.to) === foldName(oldName)) route.to = current.name;
+    });
+    links.parks.forEach(function (row) {
+      row.placeId = String(current.id);
+      if (nameChanged && foldName(row.place) === foldName(oldName)) row.place = current.name;
+    });
+    links.drives.forEach(function (row) {
+      row.placeId = String(current.id);
+      if (nameChanged && foldName(row.destination) === foldName(oldName)) row.destination = current.name;
+      if (draft.ward) row.ward = draft.ward;
+    });
+  })) return;
+  clearPlaceForm();
+  render();
+  renderRoutes();
+  renderParking();
+  refreshTodayPlaces();
 }
 function navPlace(id) {
   var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
@@ -1050,9 +1075,10 @@ function deletePlace(id) {
   var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
   if (!p) return;
   if (!confirm('「' + (p.name || 'この施設') + '」を削除しますか？ルートと乗降の記録は残ります。')) return;
-  db.places = db.places.filter(function (item) { return item && String(item.id) !== String(id); });
+  if (!withSavedChange(function () {
+    db.places = db.places.filter(function (item) { return item && String(item.id) !== String(id); });
+  })) return;
   if (String(editingPlaceId) === String(id)) clearPlaceForm();
-  persist();
   render();
   refreshTodayPlaces();
 }
@@ -1262,20 +1288,20 @@ function addRoute() {
     logs: existing && Array.isArray(existing.logs) ? existing.logs : [],
     via: points.map(function (p) { return p.place; })
   };
-  if (editingRouteId) {
-    var idx = -1;
-    for (var i = 0; i < db.routes.length; i++) {
-      if (db.routes[i] && String(db.routes[i].id) === String(editingRouteId)) idx = i;
-    }
-    if (idx >= 0) db.routes[idx] = route;
-    else db.routes.unshift(route);
-  } else db.routes.unshift(route);
   var wasEdit = !!editingRouteId;
-  if (persist()) {
-    clearRouteForm();
-    renderRoutes();
-    setStatus('routeStatus', true, wasEdit ? 'ルートを更新しました' : 'ルートを保存しました');
-  } else setStatus('routeStatus', false, '保存できませんでした');
+  if (!withSavedChange(function () {
+    if (wasEdit) {
+      var idx = -1;
+      for (var i = 0; i < db.routes.length; i++) {
+        if (db.routes[i] && String(db.routes[i].id) === String(editingRouteId)) idx = i;
+      }
+      if (idx >= 0) db.routes[idx] = route;
+      else db.routes.unshift(route);
+    } else db.routes.unshift(route);
+  })) return setStatus('routeStatus', false, '保存できませんでした');
+  clearRouteForm();
+  renderRoutes();
+  setStatus('routeStatus', true, wasEdit ? 'ルートを更新しました' : 'ルートを保存しました');
 }
 function renderRoutes() {
   var box = $('routesList');
@@ -1342,8 +1368,9 @@ function editRoute(id) {
 }
 function delRoute(id) {
   if (!confirm('このルートを削除しますか？')) return;
-  db.routes = db.routes.filter(function (x) { return x && String(x.id) !== String(id); });
-  persist();
+  if (!withSavedChange(function () {
+    db.routes = db.routes.filter(function (x) { return x && String(x.id) !== String(id); });
+  })) return;
   renderRoutes();
 }
 function instructedText(route) {
@@ -1376,16 +1403,18 @@ function openRunLog(id) {
 function saveRunLog() {
   var route = (Array.isArray(db.routes) ? db.routes : []).find(function (item) { return item && String(item.id) === String(runRouteId); });
   if (!route) return setStatus('runStatus', false, '先にルートを選んでください');
-  if (!Array.isArray(route.logs)) route.logs = [];
-  route.logs.push({
+  var entry = {
     id: nid('log'),
     at: localISODate(new Date()),
     rating: runRating === 'fix' ? 'fix' : 'keep',
     actual: v('runActual'),
     next: v('runNext'),
     instructed: instructedText(route).replace(/^指示された道：/, '')
-  });
-  if (!persist()) return setStatus('runStatus', false, '保存できませんでした');
+  };
+  if (!withSavedChange(function () {
+    if (!Array.isArray(route.logs)) route.logs = [];
+    route.logs.push(entry);
+  })) return setStatus('runStatus', false, '保存できませんでした');
   if ($('runActual')) $('runActual').value = '';
   if ($('runNext')) $('runNext').value = '';
   renderRoutes();
@@ -1472,6 +1501,7 @@ function refreshAllViews() {
   renderRoutes();
   renderRules();
   renderParking();
+  renderDrives();
   refreshTodayPlaces();
   renderDataCounts();
 }
@@ -1888,9 +1918,9 @@ function bindOrigin(id) {
   if (!el || el.getAttribute('data-origin-bound')) return;
   el.setAttribute('data-origin-bound', '1');
   el.addEventListener('change', function () {
-    db.origin = el.value.trim();
+    var next = el.value.trim();
+    if (!withSavedChange(function () { db.origin = next; })) return;
     syncOriginFields();
-    persist();
   });
 }
 function bindSuggest(inputId, boxId) {
@@ -2007,7 +2037,7 @@ function bindStatic() {
 }
 function addRule() {
   if (!v('rulePoint')) return alert('道路・交差点を入力');
-  db.rules.push({
+  var rule = {
     id: nid('rule'),
     area: v('ruleArea') || '全方面',
     point: v('rulePoint'),
@@ -2015,11 +2045,10 @@ function addRule() {
     turn: v('ruleTurn'),
     time: v('ruleTime'),
     memo: v('ruleMemo')
-  });
-  if (persist()) {
-    ['ruleArea', 'rulePoint', 'ruleMemo'].forEach(function (x) { if ($(x)) $(x).value = ''; });
-    renderRules();
-  }
+  };
+  if (!withSavedChange(function () { db.rules.push(rule); })) return;
+  ['ruleArea', 'rulePoint', 'ruleMemo'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+  renderRules();
 }
 function renderRules() {
   var box = $('rulesList');
@@ -2038,15 +2067,17 @@ function editRule(id) {
   if (p === null) return;
   var m = prompt('理由・注意点', r.memo);
   if (m === null) return;
-  r.point = p;
-  r.memo = m;
-  persist();
+  if (!withSavedChange(function () {
+    r.point = p;
+    r.memo = m;
+  })) return;
   renderRules();
 }
 function deleteRule(id) {
   if (!confirm('削除しますか？')) return;
-  db.rules = db.rules.filter(function (x) { return x && String(x.id) !== String(id); });
-  persist();
+  if (!withSavedChange(function () {
+    db.rules = db.rules.filter(function (x) { return x && String(x.id) !== String(id); });
+  })) return;
   renderRules();
 }
 function calculateDeparture() {
@@ -2082,7 +2113,7 @@ function saveParking() {
   if (!name && !drop) return alert('乗降メモまたは駐車場名を入力してください');
   if (!validPrice(price)) return alert('料金は0以上の整数にしてください');
   var linkedPlace = findPlaceExact(place);
-  parkingArray().unshift({
+  var row = {
     id: nid('pk'),
     place: place,
     placeId: linkedPlace ? String(linkedPlace.id) : '',
@@ -2096,14 +2127,13 @@ function saveParking() {
     duration: v('parkDuration'),
     checked: v('parkChecked'),
     memo: v('parkMemo')
+  };
+  if (!withSavedChange(function () { parkingArray().unshift(row); })) return;
+  ['parkPlace', 'parkAddress', 'dropoff', 'parkName', 'parkLocation', 'parkPrice', 'parkMemo'].forEach(function (k) {
+    if ($(k)) $(k).value = '';
   });
-  if (persist()) {
-    ['parkPlace', 'parkAddress', 'dropoff', 'parkName', 'parkLocation', 'parkPrice', 'parkMemo'].forEach(function (k) {
-      if ($(k)) $(k).value = '';
-    });
-    renderParking();
-    alert('保存しました');
-  }
+  renderParking();
+  alert('保存しました');
 }
 function renderParking() {
   var box = $('parkingList');
@@ -2117,7 +2147,7 @@ function renderParking() {
     return '<div class="item">' + modeChip(p.mode) + '<b>' + esc(p.place) + '</b><p class="muted">乗降：' + esc(p.dropoff || '未登録') + '（' + esc(p.status || '未登録') + '）<br>駐車：' +
       esc(p.name || '未登録') + (p.location ? ' / ' + esc(p.location) : '') + '<br>参考料金：' + price +
       '　確認日：' + esc(p.checked || '未登録') + (p.memo ? '<br>' + esc(p.memo) : '') + '</p><div class="buttons">' +
-      htmlBtn('park-nav', p.id, '駐車場へナビ') +
+      (asText(p.location).trim() ? htmlBtn('park-nav', p.id, '駐車場へナビ') : '') +
       htmlBtn('park-edit', p.id, '編集') +
       htmlBtn('park-del', p.id, '削除') +
       '</div></div>';
@@ -2125,7 +2155,10 @@ function renderParking() {
 }
 function openParking(id) {
   var p = parkingArray().find(function (x) { return x && String(x.id) === String(id); });
-  if (p) maps(p.location || p.address || p.place);
+  if (!p) return;
+  var destination = asText(p.location).trim();
+  if (!destination) { alert('駐車場の住所が未登録です。施設の住所へ誤案内しないため、ナビを開きません。'); return; }
+  maps(destination);
 }
 function editParking(id) {
   var p = parkingArray().find(function (x) { return x && String(x.id) === String(id); });
@@ -2137,16 +2170,18 @@ function editParking(id) {
   var price = prompt('参考料金（円・空欄可）', p.price || '');
   if (price === null) return;
   if (price !== '' && !/^\d+$/.test(price)) return alert('料金は0以上の整数にしてください');
-  p.dropoff = drop;
-  p.memo = memo;
-  p.price = price;
-  persist();
+  if (!withSavedChange(function () {
+    p.dropoff = drop;
+    p.memo = memo;
+    p.price = price;
+  })) return;
   renderParking();
 }
 function deleteParking(id) {
   if (!confirm('この記録を削除しますか？')) return;
-  db.parking = parkingArray().filter(function (x) { return x && String(x.id) !== String(id); });
-  persist();
+  if (!withSavedChange(function () {
+    db.parking = parkingArray().filter(function (x) { return x && String(x.id) !== String(id); });
+  })) return;
   renderParking();
 }
 function findPlaceExact(q) {
@@ -2184,7 +2219,9 @@ function todayMatches() {
   var seen = {};
   var routes = (Array.isArray(db.routes) ? db.routes : []).filter(function (r) {
     if (!r || seen[r.id]) return false;
-    var hit = (place && routeMatchesPlace(r, place)) || match(r.to) || match(r.name);
+    var hit = place && asText(r.placeId)
+      ? routeMatchesPlace(r, place)
+      : ((place && routeMatchesPlace(r, place)) || match(r.to) || match(r.name));
     if (hit) seen[r.id] = true;
     return hit;
   });
@@ -2192,6 +2229,7 @@ function todayMatches() {
     place: place,
     routes: routes,
     parking: parkingArray().filter(function (p) {
+      if (place && asText(p && p.placeId)) return parkingMatchesPlace(p, place);
       return (place && parkingMatchesPlace(p, place)) || match(p && p.place) || match(p && p.address);
     }),
     rules: (Array.isArray(db.rules) ? db.rules : []).filter(function (r) { return asText(r && r.area) === '全方面' || match(r && r.area); })
@@ -2266,7 +2304,13 @@ function priceLine(p) {
   var checked = asText(p && p.checked).trim();
   var fee = /^\d+$/.test(price) ? price + '円' : '未登録';
   var span = /^\d+$/.test(dur) ? dur + '分' : '未登録';
-  return '参考料金：' + fee + ' / 対象時間：' + span + ' / 確認日：' + (checked || '未登録');
+  var freshness = '';
+  if (checked && /^\d{4}-\d{2}-\d{2}$/.test(checked)) {
+    var checkedDate = new Date(checked + 'T00:00:00');
+    var ageDays = Math.floor((new Date() - checkedDate) / 86400000);
+    if (Number.isFinite(ageDays) && ageDays > 30) freshness = ' / 料金は30日以上前の情報です。要再確認';
+  }
+  return '参考料金：' + fee + ' / 対象時間：' + span + ' / 確認日：' + (checked || '未登録') + freshness;
 }
 function addTimeGrid(root, depart, arrive, buffer) {
   var grid = document.createElement('div');
@@ -2453,7 +2497,8 @@ function medianMinutes(values) {
   return Math.round((nums[mid - 1] + nums[mid]) / 2);
 }
 function sameDrivePlace(rec, place, destQuery) {
-  if (place && rec.placeId && String(rec.placeId) === String(place.id)) return true;
+  // Never fall back to name matching when both records have different stable IDs.
+  if (place && rec.placeId) return String(rec.placeId) === String(place.id);
   var keys = place ? placeNameKeys(place) : [];
   var query = foldName(destQuery);
   if (query && keys.indexOf(query) === -1) keys = keys.concat([query]);
@@ -2466,11 +2511,17 @@ function driveWard(rec) {
   var place = placeById(rec.placeId) || findPlaceExact(rec.destination);
   return place ? asText(place.ward).trim() : '';
 }
-function estimateDrive(destQuery, arriveAt, place) {
+function sameDriveOrigin(rec, requestedOrigin) {
+  var requested = foldName(requestedOrigin);
+  if (!requested) return true;
+  // Unknown starting points must not silently contribute to a known-origin estimate.
+  return !!(rec.origin && foldName(rec.origin) === requested);
+}
+function estimateDrive(destQuery, arriveAt, place, requestedOrigin) {
   var band = timeBand(pad2(arriveAt.getHours()) + ':' + pad2(arriveAt.getMinutes()));
   var day = arriveAt.getDay();
   var rows = (Array.isArray(db.drives) ? db.drives : []).filter(function (rec) {
-    return rec && driveMoment(rec);
+    return rec && driveMoment(rec) && sameDriveOrigin(rec, requestedOrigin);
   });
   function inBand(rec) {
     var dt = driveMoment(rec);
@@ -2575,15 +2626,18 @@ function saveDriveActual() {
   var origin = v('driveOrigin');
   var dateText = v('driveDate');
   var timeText = v('driveTime');
-  if (!destination || !origin || !parseLocalDateTime(dateText, timeText)) {
+  if (!destination || !origin || !dateText || !timeText || !parseLocalDateTime(dateText, timeText)) {
+    var missingId = !destination ? 'driveDest' : (!origin ? 'driveOrigin' : (!dateText ? 'driveDate' : 'driveTime'));
+    var missingText = !destination ? '目的地を入力してください' : (!origin ? '出発地を入力してください' : (!dateText ? '出発日を入力してください' : (!timeText ? '出発時刻を入力してください' : '出発日時を確認してください')));
     setDriveDetailOpen(true);
-    var focus = $(!destination ? 'driveDest' : (!origin ? 'driveOrigin' : 'driveDate'));
-    if (focus && focus.focus) {
-      try { focus.focus(); } catch (e) {}
-    }
-    if (!destination) return setStatus('driveStatus', false, '目的地を入力してください');
-    if (!origin) return setStatus('driveStatus', false, '出発地を入力してください');
-    return setStatus('driveStatus', false, '出発日時を入力してください');
+    setStatus('driveStatus', false, missingText);
+    var focus = $(missingId);
+    window.setTimeout(function () {
+      if (!focus) return;
+      try { focus.scrollIntoView({block: 'center'}); } catch (e) {}
+      try { focus.focus(); } catch (e2) {}
+    }, 0);
+    return;
   }
   var place = findPlaceExact(destination);
   var row = normalizeDrive({
@@ -2597,9 +2651,10 @@ function saveDriveActual() {
     memo: v('driveMemo')
   });
   if (!row) return setStatus('driveStatus', false, '記録できません');
-  if (!Array.isArray(db.drives)) db.drives = [];
-  db.drives.unshift(row);
-  if (!persist()) return setStatus('driveStatus', false, '保存できませんでした');
+  if (!withSavedChange(function () {
+    if (!Array.isArray(db.drives)) db.drives = [];
+    db.drives.unshift(row);
+  })) return setStatus('driveStatus', false, '保存できませんでした');
   if ($('driveMinutesActual')) $('driveMinutesActual').value = '';
   if ($('driveMemo')) $('driveMemo').value = '';
   renderDataCounts();
@@ -2622,8 +2677,9 @@ function deleteDrive(id) {
   var row = rows.find(function (item) { return item && String(item.id) === String(id); });
   if (!row) return;
   if (!confirm((row.destination || 'この記録') + ' ' + row.minutes + '分を削除しますか？')) return;
-  db.drives = rows.filter(function (item) { return item && String(item.id) !== String(id); });
-  if (!persist()) return setStatus('driveStatus', false, '削除できませんでした');
+  if (!withSavedChange(function () {
+    db.drives = rows.filter(function (item) { return item && String(item.id) !== String(id); });
+  })) return setStatus('driveStatus', false, '削除できませんでした');
   renderDrives();
   setStatus('driveStatus', true, '走行実績を削除しました');
 }
@@ -2664,7 +2720,7 @@ function buildToday(opts) {
     var idle = $('todayResult');
     if (idle && !destQuery) {
       clearNode(idle);
-      addBlock(idle, 'p', '目的地と到着日時を入れると、登録済みの情報をまとめます。', 'muted');
+      addBlock(idle, 'p', '目的地と到着日時を入れて、運転プランを作成します。', 'muted');
     }
     return;
   }
@@ -2732,7 +2788,7 @@ function buildToday(opts) {
     return ae - be;
   });
   var mapDest = place && asText(place.address).trim() ? placeLabel(place) : (place && asText(place.name).trim() ? place.name : destQuery);
-  learned = estimateDrive(destQuery, arriveAt, place);
+  learned = estimateDrive(destQuery, arriveAt, place, origin || db.origin || '');
   if (manualOk) {
     mode = 'manual';
     departAt = new Date(arriveAt.getTime());
@@ -2776,7 +2832,16 @@ function buildToday(opts) {
     addBlock(root, 'p', '根拠：' + learned.basis + ' / ' + learned.count + '件 / ' + learned.from + '〜' + learned.to, 'muted');
     if (learned.low) addBlock(root, 'p', '記録が少ないため、推定精度は低いです。', 'warn');
   } else if (mode === 'manual') {
-    addBlock(root, 'p', '入力した分数から逆算しています。交通予測ではありません。', 'warn');
+    if (learned && learned.minutes > 0) {
+      addBlock(root, 'p', '手入力の' + drive + '分を使っています。同じ条件の実績は' + learned.minutes + '分です。手入力が優先されています。', 'warn');
+      var useLearned = addBlock(root, 'button', '手入力を消して実績を使う');
+      useLearned.onclick = function () {
+        if ($('todayDrive')) $('todayDrive').value = '';
+        buildToday();
+      };
+    } else {
+      addBlock(root, 'p', '入力した分数から逆算しています。交通予測ではありません。', 'warn');
+    }
   } else {
     addBlock(root, 'p', 'この条件の走行実績がありません。時間は作っていません。地図で見た分数を手入力してください。', 'warn');
     var checkMap = addBlock(root, 'button', 'Googleマップで所要時間を確認');
@@ -2871,7 +2936,7 @@ function buildToday(opts) {
       addBlock(card, 'p', '住所：' + (asText(p.location).trim() || asText(p.address).trim() || '未登録'), 'muted');
       addBlock(card, 'p', priceLine(p) + ' / 満空：未登録', 'muted');
       if (asText(p.memo).trim()) addBlock(card, 'p', p.memo, 'muted');
-      if (asText(p.name).trim() || asText(p.location).trim()) {
+      if (asText(p.location).trim()) {
         var parkBtn = addBlock(card, 'button', '駐車場へナビ');
         parkBtn.onclick = function () { openParking(p.id); };
       }
