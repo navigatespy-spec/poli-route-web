@@ -184,6 +184,10 @@ details.panel>summary{margin:-2px 0 4px}
 <input id="pn" autocomplete="off">
 <label for="pa">住所</label>
 <input id="pa" autocomplete="off">
+<label for="pw">方面</label>
+<input id="pw" placeholder="未登録のまま残せます" autocomplete="off">
+<label for="paAlias">別の呼び方（1行に1つ）</label>
+<textarea id="paAlias" placeholder="表記が違うときだけ"></textarea>
 <label for="pm">車寄せ・進入・注意</label>
 <textarea id="pm"></textarea>
 <button type="button" class="primary" id="placeSave" onclick="addPlace()">施設を保存</button>
@@ -292,6 +296,13 @@ details.panel>summary{margin:-2px 0 4px}
 <textarea id="rv" placeholder="地点1&#10;地点2"></textarea>
 <button type="button" onclick="addDraftLines()">まとめて追加</button>
 <div id="draftPoints"></div>
+<h4>このルートの優先道路</h4>
+<label for="rpRoad">道路名</label>
+<input id="rpRoad" placeholder="例：架空通り" autocomplete="off">
+<label for="rpReason">理由（任意）</label>
+<input id="rpReason" placeholder="空欄でも保存できます" autocomplete="off">
+<button type="button" onclick="addDraftPrefer()">優先道路を追加</button>
+<div id="draftPrefers"></div>
 <h4>このルートで避けたい道路</h4>
 <label for="raRoad">道路名</label>
 <input id="raRoad" placeholder="例：〇〇通り" autocomplete="off">
@@ -312,6 +323,21 @@ details.panel>summary{margin:-2px 0 4px}
 <textarea id="rm"></textarea>
 <button type="button" class="primary" id="routeSave" onclick="addRoute()">ルートを保存</button>
 <button type="button" class="ghost" onclick="clearRouteForm()">入力をクリア</button>
+</details>
+<details class="panel" id="runEditor">
+<summary>停車後に記録</summary>
+<p class="muted">車を停めてから残します。位置情報は取りません。指示された道は、保存済みの通過地点です。</p>
+<p id="runRouteName"></p>
+<p id="runInstructed" class="muted"></p>
+<div class="buttons">
+<button type="button" id="runKeep" class="primary" onclick="setRunRating('keep')">このまま</button>
+<button type="button" id="runFix" onclick="setRunRating('fix')">改善したい</button>
+</div>
+<label for="runActual">実際に通った道（指示と違うときだけ）</label>
+<textarea id="runActual" rows="2" placeholder="同じなら空欄"></textarea>
+<label for="runNext">次回の注意</label>
+<textarea id="runNext" rows="2" placeholder="なければ空欄"></textarea>
+<button type="button" class="primary" onclick="saveRunLog()">記録を保存</button>
 </details>
 <div class="panel">
 <h3>優先道路・回避・注意</h3>
@@ -448,6 +474,10 @@ details.panel>summary{margin:-2px 0 4px}
 var db = {places: [], routes: [], rules: [], parking: [], origin: ''};
 var draftPoints = [];
 var draftAvoids = [];
+var draftPrefers = [];
+var draftPlaceId = '';
+var runRouteId = '';
+var runRating = 'keep';
 var editingRouteId = '';
 var editingPlaceId = '';
 var nidSeq = 0;
@@ -531,6 +561,27 @@ function parseLocalDateTime(dateStr, timeStr) {
   if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) return null;
   return dt;
 }
+function foldName(value) {
+  var s = asText(value);
+  try { s = s.normalize('NFKC'); } catch (e) {}
+  s = s.toLowerCase();
+  s = s.replace(/[\s　・･\-‐−ー]/g, '');
+  s = s.replace(/株式会社|有限会社|（株）|\(株\)|㈱/g, '');
+  return s;
+}
+function normalizeAliases(value, official) {
+  var list = [];
+  if (Array.isArray(value)) list = value.map(asText);
+  else if (value) list = String(value).split(/\n|,|、/);
+  var seen = {};
+  var officialKey = foldName(official);
+  return list.map(function (s) { return asText(s).trim(); }).filter(function (s) {
+    var key = foldName(s);
+    if (!key || key === officialKey || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
 function normalizePlace(p) {
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
   var o = Object.assign({}, p);
@@ -539,8 +590,36 @@ function normalizePlace(p) {
   o.address = asText(p.address);
   o.ward = asText(p.ward);
   o.memo = asText(p.memo);
+  o.aliases = normalizeAliases(p.aliases, o.name);
   if (!o.name && !o.address && !o.memo && !o.ward) return null;
   return o;
+}
+function placeNameKeys(place) {
+  if (!place) return [];
+  return [place.name].concat(Array.isArray(place.aliases) ? place.aliases : []).map(foldName).filter(Boolean);
+}
+function placeById(id) {
+  var key = asText(id);
+  if (!key) return null;
+  return (Array.isArray(db.places) ? db.places : []).find(function (p) { return p && String(p.id) === key; }) || null;
+}
+function routeMatchesPlace(route, place) {
+  if (!route || !place) return false;
+  if (asText(route.placeId) && asText(route.placeId) === String(place.id)) return true;
+  var to = foldName(route.to);
+  return !!to && placeNameKeys(place).indexOf(to) !== -1;
+}
+function parkingMatchesPlace(row, place) {
+  if (!row || !place) return false;
+  if (asText(row.placeId) && asText(row.placeId) === String(place.id)) return true;
+  var name = foldName(row.place);
+  return !!name && placeNameKeys(place).indexOf(name) !== -1;
+}
+function routesForPlace(place) {
+  return (Array.isArray(db.routes) ? db.routes : []).filter(function (route) { return routeMatchesPlace(route, place); });
+}
+function parkingRowsForPlace(place) {
+  return parkingArray().filter(function (row) { return parkingMatchesPlace(row, place); });
 }
 function normalizeVia(via) {
   if (Array.isArray(via)) return via.map(asText).map(function (s) { return s.trim(); }).filter(Boolean);
@@ -606,6 +685,22 @@ function normalizeAvoid(a) {
   if (!road && !reason) return null;
   return {road: road, reason: reason};
 }
+function normalizeLog(log) {
+  if (!log || typeof log !== 'object' || Array.isArray(log)) return null;
+  var rating = log.rating === 'fix' ? 'fix' : 'keep';
+  var actual = asText(log.actual).trim();
+  var next = asText(log.next).trim();
+  var instructed = asText(log.instructed).trim();
+  if (!actual && !next && !instructed && !log.at && !log.rating) return null;
+  return {
+    id: log.id != null && String(log.id) !== '' ? String(log.id) : nid('log'),
+    at: asText(log.at),
+    rating: rating,
+    actual: actual,
+    next: next,
+    instructed: instructed
+  };
+}
 function normalizeRoute(r) {
   if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
   var o = Object.assign({}, r);
@@ -615,8 +710,11 @@ function normalizeRoute(r) {
   o.to = asText(r.to);
   o.time = asText(r.time);
   o.memo = asText(r.memo);
+  o.placeId = asText(r.placeId);
   o.points = pointsFromRoute(r);
   o.avoids = Array.isArray(r.avoids) ? r.avoids.map(normalizeAvoid).filter(Boolean) : [];
+  o.prefers = Array.isArray(r.prefers) ? r.prefers.map(normalizeAvoid).filter(Boolean) : [];
+  o.logs = Array.isArray(r.logs) ? r.logs.map(normalizeLog).filter(Boolean) : [];
   o.via = o.points.map(function (p) { return p.place; });
   if (!o.name && !o.from && !o.to && !o.points.length) return null;
   return o;
@@ -649,6 +747,7 @@ function normalizeParking(p) {
   o.duration = p.duration == null ? '' : asText(p.duration);
   o.checked = asText(p.checked);
   o.memo = asText(p.memo);
+  o.placeId = asText(p.placeId);
   if (!o.place && !o.name && !o.dropoff && !o.location) return null;
   return o;
 }
@@ -731,22 +830,28 @@ function render() {
   var listEl = $('list');
   var countEl = $('count');
   if (!listEl || !countEl) return;
-  var q = v('search').toLowerCase();
+  var q = foldName(v('search'));
   var places = Array.isArray(db.places) ? db.places : [];
   var list = places.filter(function (p) {
     if (!p) return false;
-    return [p.name, p.address, p.ward, p.memo].join(' ').toLowerCase().includes(q);
+    if (!q) return true;
+    return placeNameKeys(p).concat([foldName(p.address), foldName(p.ward), foldName(p.memo)]).some(function (s) {
+      return s.indexOf(q) !== -1;
+    });
   });
   countEl.textContent = places.length + '件登録 / ' + list.length + '件一致';
   listEl.innerHTML = list.slice(0, 40).map(function (p) {
     var where = [p.ward, p.address].filter(Boolean).join(' ');
-    var linked = parkingArray().filter(function (row) { return row && asText(row.place) === asText(p.name); });
+    var linked = parkingRowsForPlace(p);
+    var routeCount = routesForPlace(p).length;
+    var aliasLine = Array.isArray(p.aliases) && p.aliases.length ? '<p class="muted">別表記：' + esc(p.aliases.join('、')) + '</p>' : '';
     var parkLine = linked.length ? linked.slice(0, 2).map(function (row) {
       return modeChip(row.mode) + esc(row.name || row.dropoff || '記録');
     }).join(' ') : '<span class="muted">乗降・駐車：未登録</span>';
     return '<div class="item"><b>' + esc(p.name) + '</b><p class="muted">' + esc(where || '住所：未登録') + '</p>' +
       (p.memo ? '<p class="muted clamp">' + esc(p.memo) + '</p>' : '') +
-      '<p class="muted">' + parkLine + '</p><div class="buttons">' +
+      aliasLine +
+      '<p class="muted">ルート ' + routeCount + '件</p><p class="muted">' + parkLine + '</p><div class="buttons">' +
       htmlBtn('place-edit', p.id, '編集') +
       htmlBtn('place-del', p.id, '削除') +
       htmlBtn('place-park', p.id, '乗降・駐車') +
@@ -761,25 +866,81 @@ function setPlaceSaveLabel() {
 }
 function clearPlaceForm() {
   editingPlaceId = '';
-  ['pn', 'pa', 'pm'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+  ['pn', 'pa', 'pw', 'pm', 'paAlias'].forEach(function (x) { if ($(x)) $(x).value = ''; });
   setPlaceSaveLabel();
+}
+function sameFacility(a, b) {
+  if (!a || !b) return false;
+  if (String(a.id || '') && String(a.id) === String(b.id || '')) return false;
+  var names = placeNameKeys(a);
+  var other = placeNameKeys(b);
+  var shared = names.some(function (n) { return other.indexOf(n) !== -1; });
+  if (!shared) return false;
+  var aa = foldName(a.address);
+  var bb = foldName(b.address);
+  if (!aa || !bb) return true;
+  return aa === bb;
 }
 function addPlace() {
   if (!v('pn')) return alert('施設名を入力');
+  var draft = {
+    id: editingPlaceId || '',
+    name: v('pn'),
+    address: v('pa'),
+    ward: v('pw'),
+    memo: v('pm'),
+    aliases: normalizeAliases(v('paAlias'), v('pn'))
+  };
+  var dup = (Array.isArray(db.places) ? db.places : []).find(function (item) { return sameFacility(item, draft); });
+  if (dup && !editingPlaceId) {
+    if (!confirm('「' + (dup.name || '既存の施設') + '」と同じ施設です。新しくは追加せず、その施設を編集しますか？')) return;
+    editPlace(dup.id);
+    return;
+  }
+  if (dup && editingPlaceId) return alert('「' + (dup.name || '別の施設') + '」と重複します。呼び方を変えるか、そちらの施設を編集してください');
   var updated = false;
   if (editingPlaceId) {
     var current = db.places.find(function (item) { return item && String(item.id) === String(editingPlaceId); });
     if (current) {
-      current.name = v('pn');
-      current.address = v('pa');
-      current.memo = v('pm');
+      var oldName = current.name;
+      var links = {
+        routes: (Array.isArray(db.routes) ? db.routes : []).filter(function (route) {
+          return asText(route.placeId) === String(current.id) || (!asText(route.placeId) && foldName(route.to) === foldName(oldName));
+        }),
+        parks: parkingArray().filter(function (row) {
+          return asText(row.placeId) === String(current.id) || (!asText(row.placeId) && foldName(row.place) === foldName(oldName));
+        })
+      };
+      var nameChanged = foldName(oldName) !== foldName(draft.name);
+      var needsStamp = links.routes.some(function (route) { return !asText(route.placeId); }) || links.parks.some(function (row) { return !asText(row.placeId); });
+      if ((nameChanged || needsStamp) && (links.routes.length || links.parks.length)) {
+        var msg = nameChanged
+          ? '施設名を変えます。ルート' + links.routes.length + '件・乗降' + links.parks.length + '件は同じIDのまま表示名を合わせます。地点や運転ルールは変えません。保存しますか？'
+          : '名前が一致するルート' + links.routes.length + '件・乗降' + links.parks.length + '件に施設IDを紐づけます。中身は変えません。保存しますか？';
+        if (!confirm(msg)) return;
+      }
+      current.name = draft.name;
+      current.address = draft.address;
+      current.ward = draft.ward;
+      current.memo = draft.memo;
+      current.aliases = draft.aliases;
+      links.routes.forEach(function (route) {
+        route.placeId = String(current.id);
+        if (nameChanged && foldName(route.to) === foldName(oldName)) route.to = current.name;
+      });
+      links.parks.forEach(function (row) {
+        row.placeId = String(current.id);
+        if (nameChanged && foldName(row.place) === foldName(oldName)) row.place = current.name;
+      });
       updated = true;
     }
   }
-  if (!updated) db.places.unshift({id: nid('p'), name: v('pn'), address: v('pa'), ward: '', memo: v('pm')});
+  if (!updated) db.places.unshift({id: nid('p'), name: draft.name, address: draft.address, ward: draft.ward, memo: draft.memo, aliases: draft.aliases});
   if (persist()) {
     clearPlaceForm();
     render();
+    renderRoutes();
+    renderParking();
     refreshTodayPlaces();
   }
 }
@@ -791,9 +952,13 @@ function makeRoute(id) {
   var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
   if (!p) return;
   clearRouteForm();
+  draftPlaceId = String(p.id);
   tab('routes');
-  if ($('rt')) $('rt').value = placeLabel(p) || p.name;
-  if ($('rn')) $('rn').value = p.name + 'へのルート';
+  var count = routesForPlace(p).length;
+  if ($('rt')) $('rt').value = p.name;
+  if ($('rn')) $('rn').value = p.name + 'へのルート' + (count ? String(count + 1) : '');
+  var form = $('routeEditor');
+  if (form) form.open = true;
 }
 function editPlace(id) {
   var p = db.places.find(function (item) { return item && String(item.id) === String(id); });
@@ -801,6 +966,8 @@ function editPlace(id) {
   editingPlaceId = String(p.id);
   if ($('pn')) $('pn').value = p.name || '';
   if ($('pa')) $('pa').value = p.address || '';
+  if ($('pw')) $('pw').value = p.ward || '';
+  if ($('paAlias')) $('paAlias').value = Array.isArray(p.aliases) ? p.aliases.join('\n') : '';
   if ($('pm')) $('pm').value = p.memo || '';
   setPlaceSaveLabel();
   var form = $('placeEditor');
@@ -852,6 +1019,19 @@ function renderDraftPoints() {
       '</div></div>';
   }).join('');
 }
+function renderDraftPrefers() {
+  var box = $('draftPrefers');
+  if (!box) return;
+  if (!draftPrefers.length) {
+    box.innerHTML = '<p class="muted">優先道路はまだありません。</p>';
+    return;
+  }
+  box.innerHTML = draftPrefers.map(function (a, i) {
+    return '<div class="item"><b>' + esc(a.road) + '</b><p class="muted">' + esc(a.reason || '理由：未登録') + '</p><div class="buttons">' +
+      htmlBtn('prefer-del', i, '削除') +
+      '</div></div>';
+  }).join('');
+}
 function renderDraftAvoids() {
   var box = $('draftAvoids');
   if (!box) return;
@@ -888,6 +1068,14 @@ function absorbDraftLines() {
   });
   if ($('rv')) $('rv').value = '';
 }
+function addDraftPrefer() {
+  var road = v('rpRoad');
+  if (!road) return alert('優先する道路名を入力');
+  draftPrefers.push({road: road, reason: v('rpReason')});
+  if ($('rpRoad')) $('rpRoad').value = '';
+  if ($('rpReason')) $('rpReason').value = '';
+  renderDraftPrefers();
+}
 function addDraftAvoid() {
   var road = v('raRoad');
   var reason = v('raReason');
@@ -918,17 +1106,26 @@ function removeDraftAvoid(index) {
   draftAvoids.splice(i, 1);
   renderDraftAvoids();
 }
+function removeDraftPrefer(index) {
+  var i = Number(index);
+  if (!isFinite(i) || i < 0 || i >= draftPrefers.length) return;
+  draftPrefers.splice(i, 1);
+  renderDraftPrefers();
+}
 function clearRouteForm() {
   editingRouteId = '';
+  draftPlaceId = '';
   draftPoints = [];
   draftAvoids = [];
-  ['rn', 'rf', 'rt', 'rv', 'rm', 'rp', 'raRoad', 'raReason'].forEach(function (x) { if ($(x)) $(x).value = ''; });
+  draftPrefers = [];
+  ['rn', 'rf', 'rt', 'rv', 'rm', 'rp', 'raRoad', 'raReason', 'rpRoad', 'rpReason'].forEach(function (x) { if ($(x)) $(x).value = ''; });
   if ($('rpTurn')) $('rpTurn').value = '通過';
   if ($('rpPriority')) $('rpPriority').value = 'prefer';
   if ($('rh')) $('rh').value = 'いつでも';
   setRouteSaveLabel();
   renderDraftPoints();
   renderDraftAvoids();
+  renderDraftPrefers();
 }
 function routeDetailHtml(r) {
   var pts = pointsFromRoute(r);
@@ -938,17 +1135,31 @@ function routeDetailHtml(r) {
   var avoids = (Array.isArray(r.avoids) ? r.avoids : []).map(function (a) {
     return esc(a.road + (a.reason ? '（' + a.reason + '）' : ''));
   }).join('<br>');
-  var limit = pts.length > MAP_WAYPOINTS ? '<br>Googleマップには先頭' + MAP_WAYPOINTS + '地点のみ渡します。右左折と必須道路は強制できません。' : '';
+  var prefers = (Array.isArray(r.prefers) ? r.prefers : []).map(function (a) {
+    return esc(a.road + (a.reason ? '（' + a.reason + '）' : ''));
+  }).join('<br>');
+  var logs = Array.isArray(r.logs) ? r.logs : [];
+  var last = logs.length ? logs[logs.length - 1] : null;
+  var limit = '<br>Googleマップへ渡るのは地点名だけ、先頭' + MAP_WAYPOINTS + '件です。右折・左折・必須・優先・回避は強制できません。';
   return esc(r.from) + ' → ' + esc(r.to) + ' / ' + esc(r.time) +
     '<br>通過順：' + (lines || '指定なし') +
+    (prefers ? '<br>優先道路：<br>' + prefers : '') +
     (avoids ? '<br>避けたい道路：<br>' + avoids : '') +
-    (r.memo ? '<br>' + esc(r.memo) : '') + limit;
+    (r.memo ? '<br>' + esc(r.memo) : '') +
+    (last ? '<br>前回の実走：' + esc(last.actual || (last.rating === 'keep' ? '指示どおり' : '未登録')) + (last.next ? ' / 次回：' + esc(last.next) : '') : '') +
+    limit;
 }
 function addRoute() {
   if (!v('rn') || !v('rf') || !v('rt')) return alert('ルート名・出発地・目的地を入力');
   absorbDraftLines();
   var points = draftPoints.map(normalizePoint).filter(Boolean);
   var avoids = draftAvoids.map(normalizeAvoid).filter(Boolean);
+  var prefers = draftPrefers.map(normalizeAvoid).filter(Boolean);
+  var existing = null;
+  if (editingRouteId) {
+    existing = (Array.isArray(db.routes) ? db.routes : []).find(function (item) { return item && String(item.id) === String(editingRouteId); }) || null;
+  }
+  var typedPlace = findPlaceExact(v('rt'));
   var route = {
     id: editingRouteId || nid('r'),
     name: v('rn'),
@@ -956,8 +1167,11 @@ function addRoute() {
     to: v('rt'),
     time: v('rh'),
     memo: v('rm'),
+    placeId: typedPlace ? String(typedPlace.id) : (draftPlaceId || (existing ? asText(existing.placeId) : '')),
     points: points,
     avoids: avoids,
+    prefers: prefers,
+    logs: existing && Array.isArray(existing.logs) ? existing.logs : [],
     via: points.map(function (p) { return p.place; })
   };
   if (editingRouteId) {
@@ -987,6 +1201,7 @@ function renderRoutes() {
     return '<div class="item"><b>' + esc(r.name) + '</b><p class="muted">' + routeDetailHtml(r) + '</p><div class="buttons">' +
       htmlBtn('route-nav', r.id, 'Googleマップ') +
       htmlBtn('route-edit', r.id, '編集') +
+      htmlBtn('route-run', r.id, '停車後に記録') +
       htmlBtn('route-del', r.id, '削除') +
       '</div></div>';
   }).join('') || '<p class="muted">ルートはまだありません。</p>';
@@ -996,7 +1211,8 @@ function navRoute(id) {
   if (!r) return;
   var via = pointsFromRoute(r).map(function (p) { return p.place; });
   if (via.length > MAP_WAYPOINTS) alert('経由地は先頭' + MAP_WAYPOINTS + '件のみGoogleマップに渡します。右左折や必須道路は地図側では強制されません。');
-  maps(r.to, r.from, via);
+  var place = placeById(r.placeId) || findPlaceExact(r.to);
+  maps(place ? (placeLabel(place) || place.name) : r.to, r.from, via);
 }
 function editRoute(id) {
   var r = db.routes.find(function (item) { return item && String(item.id) === String(id); });
@@ -1009,10 +1225,13 @@ function editRoute(id) {
   if ($('rm')) $('rm').value = r.memo || '';
   if ($('rv')) $('rv').value = '';
   if ($('rp')) $('rp').value = '';
+  draftPlaceId = asText(r.placeId);
   draftPoints = pointsFromRoute(r).map(function (p) { return {place: p.place, turn: p.turn, priority: p.priority}; });
   draftAvoids = (Array.isArray(r.avoids) ? r.avoids : []).map(function (a) { return {road: a.road, reason: a.reason}; });
+  draftPrefers = (Array.isArray(r.prefers) ? r.prefers : []).map(function (a) { return {road: a.road, reason: a.reason}; });
   renderDraftPoints();
   renderDraftAvoids();
+  renderDraftPrefers();
   setRouteSaveLabel();
   var form = $('routeEditor');
   if (form) form.open = true;
@@ -1026,6 +1245,54 @@ function delRoute(id) {
   db.routes = db.routes.filter(function (x) { return x && String(x.id) !== String(id); });
   persist();
   renderRoutes();
+}
+function instructedText(route) {
+  var pts = pointsFromRoute(route);
+  if (!pts.length) return '指示された道：未登録';
+  return '指示された道：' + pts.map(function (p, i) {
+    return (i + 1) + '. ' + p.place + ' ' + (asText(p.turn).trim() || '通過');
+  }).join(' / ');
+}
+function setRunRating(rating) {
+  runRating = rating === 'fix' ? 'fix' : 'keep';
+  var keep = $('runKeep');
+  var fix = $('runFix');
+  if (keep) keep.classList.toggle('primary', runRating === 'keep');
+  if (fix) fix.classList.toggle('primary', runRating === 'fix');
+}
+function openRunLog(id) {
+  var route = (Array.isArray(db.routes) ? db.routes : []).find(function (item) { return item && String(item.id) === String(id); });
+  if (!route) return alert('ルートが見つかりません');
+  runRouteId = String(route.id);
+  setRunRating('keep');
+  if ($('runActual')) $('runActual').value = '';
+  if ($('runNext')) $('runNext').value = '';
+  if ($('runRouteName')) $('runRouteName').textContent = route.name || '名称未登録';
+  if ($('runInstructed')) $('runInstructed').textContent = instructedText(route);
+  var form = $('runEditor');
+  if (form) form.open = true;
+  tab('routes');
+  if (form && form.scrollIntoView) {
+    try { form.scrollIntoView({block: 'start'}); } catch (e) { form.scrollIntoView(); }
+  }
+}
+function saveRunLog() {
+  var route = (Array.isArray(db.routes) ? db.routes : []).find(function (item) { return item && String(item.id) === String(runRouteId); });
+  if (!route) return alert('先にルートを選んでください');
+  if (!Array.isArray(route.logs)) route.logs = [];
+  route.logs.push({
+    id: nid('log'),
+    at: localISODate(new Date()),
+    rating: runRating === 'fix' ? 'fix' : 'keep',
+    actual: v('runActual'),
+    next: v('runNext'),
+    instructed: instructedText(route).replace(/^指示された道：/, '')
+  });
+  if (!persist()) return;
+  if ($('runActual')) $('runActual').value = '';
+  if ($('runNext')) $('runNext').value = '';
+  renderRoutes();
+  alert('停車後の記録を保存しました');
 }
 function applyImportedData(o, mode) {
   if (!o || typeof o !== 'object') throw new Error('JSONの形式が正しくありません');
@@ -1071,13 +1338,18 @@ function applyImportedData(o, mode) {
     var arr = Array.isArray(o) ? o : o.places;
     if (!Array.isArray(arr)) throw new Error('placesがありません');
     var keys = {};
-    db.places.forEach(function (x) { keys[x.name + '|' + x.address] = true; });
+    function rememberPlace(place) {
+      var addr = foldName(place.address);
+      placeNameKeys(place).forEach(function (name) { keys[name + '|' + addr] = true; });
+    }
+    db.places.forEach(rememberPlace);
     arr.forEach(function (p) {
       var place = normalizePlace(p);
       if (!place || !place.name) return;
-      var k = place.name + '|' + place.address;
-      if (keys[k]) return;
-      keys[k] = true;
+      var addr = foldName(place.address);
+      var dup = placeNameKeys(place).some(function (name) { return keys[name + '|' + addr]; });
+      if (dup) return;
+      rememberPlace(place);
       place.id = nid('p');
       db.places.push(place);
     });
@@ -1533,8 +1805,11 @@ function bindSuggest(inputId, boxId) {
     var q = input.value.trim().toLowerCase();
     clearNode(box);
     if (!q) { box.classList.add('hidden'); return; }
+    var folded = foldName(q);
     var hits = (Array.isArray(db.places) ? db.places : []).filter(function (p) {
-      return [p && p.name, p && p.ward, p && p.address].join(' ').toLowerCase().includes(q);
+      return placeNameKeys(p).concat([foldName(p && p.ward), foldName(p && p.address)]).some(function (s) {
+        return s && (s.indexOf(folded) !== -1 || [p && p.name, p && p.ward, p && p.address].join(' ').toLowerCase().includes(q));
+      });
     }).slice(0, 8);
     if (!hits.length) { box.classList.add('hidden'); return; }
     hits.forEach(function (p) {
@@ -1553,6 +1828,7 @@ function bindSuggest(inputId, boxId) {
           if (addr && !addr.value.trim()) addr.value = placeAddress(p);
         }
         hide();
+        if (inputId === 'todayDest' && v('todayDate') && v('todayTime')) buildToday();
       };
       b.addEventListener('pointerdown', choose);
       b.addEventListener('click', choose);
@@ -1578,7 +1854,9 @@ function onActionClick(e) {
     else if (act === 'place-del') deletePlace(id);
     else if (act === 'route-nav') navRoute(id);
     else if (act === 'route-edit') editRoute(id);
+    else if (act === 'route-run') openRunLog(id);
     else if (act === 'route-del') delRoute(id);
+    else if (act === 'prefer-del') removeDraftPrefer(id);
     else if (act === 'point-up') moveDraftPoint(id, -1);
     else if (act === 'point-down') moveDraftPoint(id, 1);
     else if (act === 'point-del') removeDraftPoint(id);
@@ -1686,9 +1964,11 @@ function saveParking() {
   if (!place) return alert('施設名を入力してください');
   if (!name && !drop) return alert('乗降メモまたは駐車場名を入力してください');
   if (!validPrice(price)) return alert('料金は0以上の整数にしてください');
+  var linkedPlace = findPlaceExact(place);
   parkingArray().unshift({
     id: nid('pk'),
     place: place,
+    placeId: linkedPlace ? String(linkedPlace.id) : '',
     address: v('parkAddress'),
     dropoff: drop,
     status: v('dropStatus'),
@@ -1752,33 +2032,51 @@ function deleteParking(id) {
   persist();
   renderParking();
 }
+function findPlaceExact(q) {
+  var query = foldName(q);
+  if (!query) return null;
+  return (Array.isArray(db.places) ? db.places : []).find(function (p) {
+    return placeNameKeys(p).indexOf(query) !== -1;
+  }) || null;
+}
 function findPlace(q) {
-  var query = String(q || '').trim().toLowerCase();
+  var query = foldName(q);
   if (!query) return null;
   var places = Array.isArray(db.places) ? db.places : [];
   return places.find(function (p) {
-    return asText(p && p.name).toLowerCase() === query || asText(p && p.address).toLowerCase() === query;
+    return placeNameKeys(p).indexOf(query) !== -1 || foldName(p && p.address) === query;
   }) || places.find(function (p) {
-    return asText(p && p.name).toLowerCase().includes(query);
+    return placeNameKeys(p).some(function (name) { return name.indexOf(query) !== -1; });
   }) || null;
 }
 function todayMatches() {
-  var q = v('todayDest').toLowerCase();
-  if (!q) return {place: null, routes: [], parking: [], rules: []};
+  var q = v('todayDest');
+  if (!foldName(q)) return {place: null, routes: [], parking: [], rules: []};
   var place = findPlace(q);
-  var terms = [q];
+  var terms = [q.toLowerCase()];
   if (place) {
-    if (place.name) terms.push(asText(place.name).toLowerCase());
-    if (place.address) terms.push(asText(place.address).toLowerCase());
+    [place.name, place.address, place.ward].concat(place.aliases || []).forEach(function (value) {
+      var term = asText(value).toLowerCase();
+      if (term && terms.indexOf(term) === -1) terms.push(term);
+    });
   }
   var match = function (s) {
     var hay = asText(s).toLowerCase();
     return terms.some(function (t) { return t && hay.includes(t); });
   };
+  var seen = {};
+  var routes = (Array.isArray(db.routes) ? db.routes : []).filter(function (r) {
+    if (!r || seen[r.id]) return false;
+    var hit = (place && routeMatchesPlace(r, place)) || match(r.to) || match(r.name);
+    if (hit) seen[r.id] = true;
+    return hit;
+  });
   return {
     place: place,
-    routes: (Array.isArray(db.routes) ? db.routes : []).filter(function (r) { return match(r && r.to) || match(r && r.name); }),
-    parking: parkingArray().filter(function (p) { return match(p && p.place) || match(p && p.address); }),
+    routes: routes,
+    parking: parkingArray().filter(function (p) {
+      return (place && parkingMatchesPlace(p, place)) || match(p && p.place) || match(p && p.address);
+    }),
     rules: (Array.isArray(db.rules) ? db.rules : []).filter(function (r) { return asText(r && r.area) === '全方面' || match(r && r.area); })
   };
 }
@@ -2014,8 +2312,11 @@ function buildToday() {
     var avoids = (Array.isArray(route.avoids) ? route.avoids : []).map(function (a) {
       return asText(a.road).trim() + (asText(a.reason).trim() ? '（' + a.reason + '）' : '');
     }).filter(Boolean);
+    var routePrefers = (Array.isArray(route.prefers) ? route.prefers : []).map(function (a) {
+      return asText(a.road).trim() + (asText(a.reason).trim() ? '（' + a.reason + '）' : '');
+    }).filter(Boolean);
     var avoidRoads = avoids.concat(avoidRules.map(function (rule) { return rule.point + '（ルール）'; }));
-    var preferRoads = preferRules.map(function (rule) { return rule.point; });
+    var preferRoads = routePrefers.concat(preferRules.map(function (rule) { return rule.point + '（ルール）'; }));
     var missing = missingMustRules(route, mustRules);
     var routeTime = asText(route.time).trim();
     addBlock(card, 'p', (route.name || '名称未登録') + ' / ' + (routeTime || '時間帯：未登録'));
@@ -2030,11 +2331,20 @@ function buildToday() {
       addBlock(card, 'p', '必須地点「' + rule.point + '」がこのルートの通過地点に入っていません。記録の不足であり、規制の判定ではありません。', 'warn');
     });
     if (asText(route.memo).trim()) addBlock(card, 'p', '選ぶ理由：' + route.memo, 'muted');
+    var logs = Array.isArray(route.logs) ? route.logs : [];
+    var lastLog = logs.length ? logs[logs.length - 1] : null;
+    if (lastLog) {
+      addBlock(card, 'p', '指示された道：' + (lastLog.instructed || '未登録'), 'muted');
+      addBlock(card, 'p', '実際に通った道：' + (lastLog.actual || (lastLog.rating === 'keep' ? '指示どおり' : '未登録')), 'muted');
+      addBlock(card, 'p', '次回の注意：' + (lastLog.next || '未登録'), 'muted');
+    } else addBlock(card, 'p', '実走メモ：未登録', 'muted');
     addBlock(card, 'p', '交差点指示（記録した順）', 'muted');
     addSteps(card, points);
-    addBlock(card, 'p', '右左折は記録です。Googleマップでは強制できません。現地の標識を優先してください。', 'warn');
+    addBlock(card, 'p', '右左折・必須・優先・回避はGoogleマップへ送りません。地図側では強制できません。', 'warn');
     var btn = addBlock(card, 'button', 'このルートでGoogleマップを開く');
     btn.onclick = function () { openCandidate(route); };
+    var runBtn = addBlock(card, 'button', '停車後に記録');
+    runBtn.onclick = function () { openRunLog(route.id); };
   });
   function addParkingGroup(title, rows, gapLabel) {
     if (!rows.length) {
@@ -2337,6 +2647,7 @@ function boot() {
     safeCall(renderRoutes);
     safeCall(renderDraftPoints);
     safeCall(renderDraftAvoids);
+    safeCall(renderDraftPrefers);
     safeCall(renderRules);
     safeCall(renderParking);
     safeCall(renderDataCounts);
