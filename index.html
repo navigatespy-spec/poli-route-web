@@ -134,6 +134,8 @@ details.panel>summary{margin:-2px 0 4px}
 <input id="todayTime" type="time" value="18:00">
 </div>
 </div>
+<button type="button" class="primary" onclick="createDrivePlan()">運転プランを作成</button>
+<p class="muted">保存済みの走行実績から出発時刻を推定します。リアルタイムの交通情報ではありません。</p>
 <details id="todayOptions">
 <summary>出発地・余裕・走行時間</summary>
 <label for="todayOrigin">出発地</label>
@@ -146,8 +148,8 @@ details.panel>summary{margin:-2px 0 4px}
 <option value="30">かなり余裕 30分</option>
 </select>
 <label for="todayDrive">走行時間（分）</label>
-<input id="todayDrive" type="number" min="1" placeholder="未入力のままにできます" inputmode="numeric">
-<p class="muted">走行時間は手入力です。空欄のとき出発時刻は計算しません。交通予測、料金、満空は出しません。</p>
+<input id="todayDrive" type="number" min="1" placeholder="実績が足りないときだけ" inputmode="numeric">
+<p class="muted">実績が足りないときは、地図で見た分数を入れてください。空欄のときは実績だけを使い、実績がなければ出発時刻は作りません。</p>
 </details>
 </div>
 <div id="todayResult" class="panel"><p class="muted">目的地と到着日時を入れると、登録済みの情報をまとめます。</p></div>
@@ -329,7 +331,32 @@ details.panel>summary{margin:-2px 0 4px}
 </div>
 <details class="panel" id="runEditor">
 <summary>停車後に記録</summary>
-<p class="muted">車を停めてから残します。位置情報は取りません。指示された道は、保存済みの通過地点です。</p>
+<p class="muted">車を停めてから残します。位置情報は取りません。走行時間は端末内だけに保存します。</p>
+<p id="driveSummary" class="muted">今日の運転でプランを作ると、出発地と目的地を引き継ぎます。</p>
+<label for="driveMinutesActual">実際の走行時間（分）</label>
+<input id="driveMinutesActual" type="number" min="1" max="1440" inputmode="numeric" placeholder="停車後に入力">
+<label for="driveMemo">メモ（任意）</label>
+<input id="driveMemo" placeholder="空欄でも保存できます" autocomplete="off">
+<details id="driveDetail">
+<summary>出発地・日時・ルートを直す</summary>
+<label for="driveOrigin">出発地</label>
+<input id="driveOrigin" autocomplete="off">
+<label for="driveDest">目的地</label>
+<input id="driveDest" autocomplete="off">
+<div class="pair when-narrow">
+<div>
+<label for="driveDate">出発日</label>
+<input id="driveDate" type="date">
+</div>
+<div>
+<label for="driveTime">出発時刻</label>
+<input id="driveTime" type="time">
+</div>
+</div>
+<label for="driveRoute">利用したルート</label>
+<select id="driveRoute"></select>
+</details>
+<button type="button" class="primary" onclick="saveDriveActual()">走行時間を保存</button>
 <p id="runRouteName"></p>
 <p id="runInstructed" class="muted"></p>
 <div class="buttons">
@@ -469,7 +496,7 @@ details.panel>summary{margin:-2px 0 4px}
 <script>
 'use strict';
 // v4 dashboard: all calculations and matching are local; no background GPS or network requests.
-var db = {places: [], routes: [], rules: [], parking: [], origin: ''};
+var db = {places: [], routes: [], rules: [], parking: [], origin: '', drives: []};
 var draftPoints = [];
 var draftAvoids = [];
 var draftPrefers = [];
@@ -483,6 +510,13 @@ var storageLocked = false;
 var pendingKnowhow = null;
 var STORAGE_KEY = 'poli-route-v5';
 var MAP_WAYPOINTS = 3;
+var TRAFFIC_REQUEST_LIMIT = 2;
+var trafficBackend = 'mock';
+var mockTrafficProfile = 'evening';
+var mockTrafficSeq = 0;
+var lastTrafficPlan = null;
+var lastDriveContext = null;
+var driveFormPlaceId = '';
 
 function $(id) { return document.getElementById(id); }
 function v(id) {
@@ -912,14 +946,17 @@ function addPlace() {
         }),
         parks: parkingArray().filter(function (row) {
           return asText(row.placeId) === String(current.id) || (!asText(row.placeId) && foldName(row.place) === foldName(oldName));
+        }),
+        drives: (Array.isArray(db.drives) ? db.drives : []).filter(function (row) {
+          return asText(row.placeId) === String(current.id) || (!asText(row.placeId) && foldName(row.destination) === foldName(oldName));
         })
       };
       var nameChanged = foldName(oldName) !== foldName(draft.name);
-      var needsStamp = links.routes.some(function (route) { return !asText(route.placeId); }) || links.parks.some(function (row) { return !asText(row.placeId); });
-      if ((nameChanged || needsStamp) && (links.routes.length || links.parks.length)) {
+      var needsStamp = links.routes.some(function (route) { return !asText(route.placeId); }) || links.parks.some(function (row) { return !asText(row.placeId); }) || links.drives.some(function (row) { return !asText(row.placeId); });
+      if ((nameChanged || needsStamp) && (links.routes.length || links.parks.length || links.drives.length)) {
         var msg = nameChanged
-          ? '施設名を変えます。ルート' + links.routes.length + '件・乗降' + links.parks.length + '件は同じIDのまま表示名を合わせます。地点や運転ルールは変えません。保存しますか？'
-          : '名前が一致するルート' + links.routes.length + '件・乗降' + links.parks.length + '件に施設IDを紐づけます。中身は変えません。保存しますか？';
+          ? '施設名を変えます。ルート' + links.routes.length + '件・乗降' + links.parks.length + '件・走行実績' + links.drives.length + '件は同じIDのまま表示名を合わせます。通過地点や運転ルールは変えません。保存しますか？'
+          : '名前が一致するルート' + links.routes.length + '件・乗降' + links.parks.length + '件・走行実績' + links.drives.length + '件に施設IDを紐づけます。中身は変えません。保存しますか？';
         if (!confirm(msg)) return;
       }
       current.name = draft.name;
@@ -934,6 +971,11 @@ function addPlace() {
       links.parks.forEach(function (row) {
         row.placeId = String(current.id);
         if (nameChanged && foldName(row.place) === foldName(oldName)) row.place = current.name;
+      });
+      links.drives.forEach(function (row) {
+        row.placeId = String(current.id);
+        if (nameChanged && foldName(row.destination) === foldName(oldName)) row.destination = current.name;
+        if (draft.ward) row.ward = draft.ward;
       });
       updated = true;
     }
@@ -1294,6 +1336,7 @@ function openRunLog(id) {
   if ($('runNext')) $('runNext').value = '';
   if ($('runRouteName')) $('runRouteName').textContent = route.name || '名称未登録';
   if ($('runInstructed')) $('runInstructed').textContent = instructedText(route);
+  fillDriveForm(route.id);
   var form = $('runEditor');
   if (form) form.open = true;
   tab('routes');
@@ -1334,7 +1377,7 @@ function applyImportedData(o, mode) {
   if (full && mode !== 'places') {
     var placeCount = o.places.length;
     var routeCount = o.routes.length;
-    var hasNow = db.places.length || db.routes.length || db.rules.length || (Array.isArray(db.parking) && db.parking.length);
+    var hasNow = db.places.length || db.routes.length || db.rules.length || (Array.isArray(db.parking) && db.parking.length) || (Array.isArray(db.drives) && db.drives.length);
     if (!placeCount && !routeCount && hasNow) {
       alert('中身が空のファイルでは、今のデータを置き換えません');
       return false;
@@ -1343,7 +1386,8 @@ function applyImportedData(o, mode) {
     var nextRoutes = o.routes.map(normalizeRoute).filter(Boolean);
     var nextRules = Array.isArray(o.rules) ? o.rules.map(normalizeRule).filter(Boolean) : null;
     var nextParking = Array.isArray(o.parking) ? o.parking.map(normalizeParking).filter(Boolean) : null;
-    var nextUsable = nextPlaces.length || nextRoutes.length || (nextRules && nextRules.length) || (nextParking && nextParking.length);
+    var nextDrives = Array.isArray(o.drives) ? o.drives.map(normalizeDrive).filter(Boolean) : null;
+    var nextUsable = nextPlaces.length || nextRoutes.length || (nextRules && nextRules.length) || (nextParking && nextParking.length) || (nextDrives && nextDrives.length);
     if (hasNow && !nextUsable) {
       alert('ファイルから読み取れる記録がありません。今のデータは残しています');
       return false;
@@ -1351,13 +1395,16 @@ function applyImportedData(o, mode) {
     var nowPark = Array.isArray(db.parking) ? db.parking.length : 0;
     var fileRules = Array.isArray(o.rules) ? ('ルール' + o.rules.length) : 'ルールはファイルに無いので現状維持';
     var fileParks = Array.isArray(o.parking) ? ('乗降駐車' + o.parking.length) : '乗降駐車はファイルに無いので現状維持';
-    if (!confirm('今のデータを置き換えます。現在は施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + nowPark + 'です。ファイルは施設' + placeCount + '・ルート' + routeCount + '・' + fileRules + '・' + fileParks + 'です。先にバックアップしてください。置き換えますか？')) return false;
+    var fileDrives = Array.isArray(o.drives) ? ('走行実績' + o.drives.length) : '走行実績はファイルに無いので現状維持';
+    var nowDrives = Array.isArray(db.drives) ? db.drives.length : 0;
+    if (!confirm('今のデータを置き換えます。現在は施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + nowPark + '・走行実績' + nowDrives + 'です。ファイルは施設' + placeCount + '・ルート' + routeCount + '・' + fileRules + '・' + fileParks + '・' + fileDrives + 'です。先にバックアップしてください。置き換えますか？')) return false;
     db = {
       places: nextPlaces,
       routes: nextRoutes,
       rules: nextRules == null ? db.rules : nextRules,
       parking: nextParking == null ? db.parking : nextParking,
-      origin: typeof o.origin === 'string' ? o.origin : (db.origin || '')
+      origin: typeof o.origin === 'string' ? o.origin : (db.origin || ''),
+      drives: nextDrives == null ? (Array.isArray(db.drives) ? db.drives : []) : nextDrives
     };
   } else {
     var arr = Array.isArray(o) ? o : o.places;
@@ -1402,7 +1449,7 @@ function refreshAllViews() {
 function renderDataCounts() {
   var el = $('dataCounts');
   if (!el) return;
-  el.textContent = '施設 ' + db.places.length + ' / ルート ' + db.routes.length + ' / ルール ' + db.rules.length + ' / 乗降・駐車 ' + parkingArray().length;
+  el.textContent = '施設 ' + db.places.length + ' / ルート ' + db.routes.length + ' / ルール ' + db.rules.length + ' / 乗降・駐車 ' + parkingArray().length + ' / 走行 ' + (Array.isArray(db.drives) ? db.drives.length : 0);
 }
 async function importFile(inputId, mode) {
   var input = $(inputId || 'file');
@@ -1422,7 +1469,7 @@ async function importFile(inputId, mode) {
     }
     refreshAllViews();
     alert(mode === 'restore'
-      ? '復元完了：施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + parkingArray().length
+      ? '復元完了：施設' + db.places.length + '・ルート' + db.routes.length + '・ルール' + db.rules.length + '・乗降駐車' + parkingArray().length + '・走行実績' + (Array.isArray(db.drives) ? db.drives.length : 0)
       : '取り込み完了：施設' + db.places.length);
   } catch (e) {
     db = snapshot;
@@ -1793,7 +1840,8 @@ function loadStored() {
         routes: x.routes.map(normalizeRoute).filter(Boolean),
         rules: Array.isArray(x.rules) ? x.rules.map(normalizeRule).filter(Boolean) : [],
         parking: Array.isArray(x.parking) ? x.parking.map(normalizeParking).filter(Boolean) : [],
-        origin: typeof x.origin === 'string' ? x.origin : ''
+        origin: typeof x.origin === 'string' ? x.origin : '',
+        drives: Array.isArray(x.drives) ? x.drives.map(normalizeDrive).filter(Boolean) : []
       };
       return;
     }
@@ -1913,6 +1961,13 @@ function bindStatic() {
     el.addEventListener('input', scheduleToday);
     el.addEventListener('change', scheduleToday);
   });
+  var driveInput = $('todayDrive');
+  if (driveInput && !driveInput.getAttribute('data-manual-bound')) {
+    driveInput.setAttribute('data-manual-bound', '1');
+    driveInput.addEventListener('input', function () {
+      lastTrafficPlan = null;
+    });
+  }
   var fields = document.querySelectorAll('input[type="text"], textarea, input:not([type])');
   for (var i = 0; i < fields.length; i++) {
     fields[i].setAttribute('autocorrect', 'off');
@@ -2212,6 +2267,308 @@ function addSteps(parent, points) {
   });
   parent.appendChild(ol);
 }
+function uniqueLabel(list, value) {
+  var text = asText(value).trim();
+  if (text && list.indexOf(text) === -1) list.push(text);
+}
+function collectRouteConstraints() {
+  var matched = todayMatches();
+  var must = [];
+  var turns = [];
+  var prefers = [];
+  var avoids = [];
+  var ruleTurns = 0;
+  (matched.routes || []).forEach(function (route) {
+    pointsFromRoute(route).forEach(function (point) {
+      if (point.priority === 'must') uniqueLabel(must, point.place);
+      var turn = asText(point.turn).trim();
+      if (turn && turn !== '通過') uniqueLabel(turns, point.place + ' ' + turn);
+    });
+    (Array.isArray(route.prefers) ? route.prefers : []).forEach(function (row) { uniqueLabel(prefers, row.road); });
+    (Array.isArray(route.avoids) ? route.avoids : []).forEach(function (row) { uniqueLabel(avoids, row.road); });
+  });
+  (matched.rules || []).forEach(function (rule) {
+    if (rule.level === 'must') uniqueLabel(must, rule.point);
+    if (rule.level === 'prefer') uniqueLabel(prefers, rule.point);
+    if (rule.level === 'avoid') uniqueLabel(avoids, rule.point);
+    if (asText(rule.turn).trim()) ruleTurns += 1;
+  });
+  return {
+    via: must.slice(0, MAP_WAYPOINTS),
+    omittedVia: must.slice(MAP_WAYPOINTS),
+    turns: turns,
+    prefers: prefers,
+    avoids: avoids,
+    ruleTurns: ruleTurns
+  };
+}
+function briefLabels(list) {
+  if (!list.length) return '';
+  if (list.length <= 3) return list.join('、');
+  return list.slice(0, 3).join('、') + '、ほか' + (list.length - 3) + '件';
+}
+function trafficPlanKey() {
+  var constraints = collectRouteConstraints();
+  return [v('todayOrigin') || db.origin || '', v('todayDest'), v('todayDate'), v('todayTime'), v('todayBuffer'), constraints.via.join('|')].join('\n');
+}
+function trafficPlanForCurrent() {
+  if (!lastTrafficPlan || lastTrafficPlan.key !== trafficPlanKey()) return null;
+  return lastTrafficPlan;
+}
+function clockText(dt) {
+  return pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+}
+function departLabel(dt, arrivalDate) {
+  if (localISODate(dt) !== arrivalDate) return localISODate(dt) + ' ' + clockText(dt);
+  return clockText(dt);
+}
+function mockTrafficPredict(departure) {
+  mockTrafficSeq += 1;
+  if (mockTrafficProfile === 'fail') return {ok: false, error: 'mock-fail'};
+  if (mockTrafficProfile === 'second-fail' && mockTrafficSeq >= 2) return {ok: false, error: 'mock-fail'};
+  var minutes = 40;
+  if (mockTrafficProfile === 'shift') minutes = departure.getMinutes() >= 30 ? 55 : 20;
+  else if (mockTrafficProfile === 'evening') {
+    var hour = departure.getHours();
+    minutes = (hour >= 16 && hour < 19) ? 50 : 30;
+  }
+  return {ok: true, minutes: minutes, source: 'テスト用予測'};
+}
+function routesApiPredict() {
+  return {ok: false, error: 'routes-disabled'};
+}
+function trafficPredict(departure) {
+  if (trafficBackend !== 'mock') return routesApiPredict(departure);
+  return mockTrafficPredict(departure);
+}
+function computeDeparture(arrival, bufferMin, predict) {
+  var seed = 30;
+  var depart = new Date(arrival.getTime() - (bufferMin + seed) * 60000);
+  var samples = [];
+  var calls = 0;
+  while (calls < TRAFFIC_REQUEST_LIMIT) {
+    calls += 1;
+    var result = predict(depart, calls);
+    if (!result || result.ok === false || !isFinite(Number(result.minutes)) || Number(result.minutes) <= 0) {
+      if (!samples.length) return {status: 'fallback', calls: calls, error: result && result.error ? result.error : 'invalid'};
+      return {status: 'partial', depart: samples[0].implied, drive: samples[0].drive, calls: calls, spread: 0, source: 'テスト用予測'};
+    }
+    var drive = Number(result.minutes);
+    var implied = new Date(arrival.getTime() - (bufferMin + drive) * 60000);
+    samples.push({queried: depart, drive: drive, implied: implied});
+    if (Math.abs(implied.getTime() - depart.getTime()) <= 60000) {
+      return {status: 'ok', depart: implied, drive: drive, calls: calls, spread: 0, source: 'テスト用予測'};
+    }
+    depart = implied;
+  }
+  var early = samples[0];
+  var late = samples[0];
+  samples.forEach(function (sample) {
+    if (sample.implied < early.implied) early = sample;
+    if (sample.implied > late.implied) late = sample;
+  });
+  var spread = Math.round((late.implied.getTime() - early.implied.getTime()) / 60000);
+  if (spread <= 1) return {status: 'ok', depart: early.implied, drive: early.drive, calls: calls, spread: 0, source: 'テスト用予測'};
+  return {status: 'split', depart: early.implied, other: late.implied, drive: early.drive, otherDrive: late.drive, calls: calls, spread: spread, source: 'テスト用予測'};
+}
+function renderTrafficNotes(root, traffic, arrivalDate) {
+  addBlock(root, 'p', 'テスト用予測です。未来の交通の確定値ではなく、到着を保証しません。', 'warn');
+  if (traffic.status === 'split') {
+    addBlock(root, 'p', '予測が分かれました。安全側の出発を表示しています。差は' + traffic.spread + '分です。もう一方は' + departLabel(traffic.other, arrivalDate) + 'です。', 'warn');
+  }
+  if (traffic.status === 'partial') addBlock(root, 'p', '2回目の予測は取得できませんでした。1回目の結果を表示しています。', 'warn');
+  if (traffic.depart && traffic.depart.getTime() < Date.now()) addBlock(root, 'p', 'この出発時刻は現在より前です。', 'warn');
+  var constraints = traffic.constraints || {via: [], omittedVia: [], turns: [], prefers: [], avoids: [], ruleTurns: 0};
+  if (constraints.via.length) addBlock(root, 'p', '経由に含められる必須地点：' + briefLabels(constraints.via), 'muted');
+  else addBlock(root, 'p', '必須地点は未登録です。経由なしの予測です。', 'muted');
+  if (constraints.omittedVia.length) addBlock(root, 'p', '4件目以降の必須地点は経由に含めていません：' + briefLabels(constraints.omittedVia), 'warn');
+  addBlock(root, 'p', '経由地点を指定しても、右折・左折・直進は保証されません。', 'warn');
+  if (constraints.turns.length) addBlock(root, 'p', 'ルートに記録された曲がり方：' + briefLabels(constraints.turns), 'muted');
+  if (constraints.ruleTurns) addBlock(root, 'p', '運転ルールの曲がり方は経路に反映できません。', 'muted');
+  if (constraints.prefers.length || constraints.avoids.length) {
+    addBlock(root, 'p', '優先道路と回避道路は経路APIの条件にできません。この画面の照合だけです。', 'warn');
+    if (constraints.prefers.length) addBlock(root, 'p', '優先道路：' + briefLabels(constraints.prefers), 'muted');
+    if (constraints.avoids.length) addBlock(root, 'p', '回避道路：' + briefLabels(constraints.avoids), 'muted');
+  }
+}
+function normalizeDrive(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  var destination = asText(row.destination).trim();
+  var departAt = asText(row.departAt).trim();
+  var minutes = Number(row.minutes);
+  if (!destination || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(departAt)) return null;
+  if (!isFinite(minutes) || minutes <= 0 || minutes > 1440) return null;
+  return {
+    id: asText(row.id).trim() || nid('drv'),
+    origin: asText(row.origin).trim(),
+    destination: destination,
+    placeId: asText(row.placeId).trim(),
+    ward: asText(row.ward).trim(),
+    departAt: departAt,
+    minutes: Math.round(minutes),
+    routeId: asText(row.routeId).trim(),
+    memo: asText(row.memo).trim()
+  };
+}
+function driveMoment(rec) {
+  var parts = String(rec && rec.departAt || '').split('T');
+  if (parts.length < 2) return null;
+  return parseLocalDateTime(parts[0], parts[1]);
+}
+function medianMinutes(values) {
+  var nums = values.filter(function (n) { return isFinite(n); }).slice().sort(function (a, b) { return a - b; });
+  if (!nums.length) return 0;
+  var mid = Math.floor(nums.length / 2);
+  if (nums.length % 2) return nums[mid];
+  return Math.round((nums[mid - 1] + nums[mid]) / 2);
+}
+function sameDrivePlace(rec, place, destQuery) {
+  if (place && rec.placeId && String(rec.placeId) === String(place.id)) return true;
+  var keys = place ? placeNameKeys(place) : [];
+  var query = foldName(destQuery);
+  if (query && keys.indexOf(query) === -1) keys = keys.concat([query]);
+  if (!keys.length && query) keys = [query];
+  var name = foldName(rec.destination);
+  return !!(name && keys.indexOf(name) !== -1);
+}
+function driveWard(rec) {
+  if (asText(rec.ward).trim()) return asText(rec.ward).trim();
+  var place = placeById(rec.placeId) || findPlaceExact(rec.destination);
+  return place ? asText(place.ward).trim() : '';
+}
+function estimateDrive(destQuery, arriveAt, place) {
+  var band = timeBand(pad2(arriveAt.getHours()) + ':' + pad2(arriveAt.getMinutes()));
+  var day = arriveAt.getDay();
+  var rows = (Array.isArray(db.drives) ? db.drives : []).filter(function (rec) {
+    return rec && driveMoment(rec);
+  });
+  function inBand(rec) {
+    var dt = driveMoment(rec);
+    return !!dt && timeBand(pad2(dt.getHours()) + ':' + pad2(dt.getMinutes())) === band;
+  }
+  function onDay(rec) {
+    var dt = driveMoment(rec);
+    return !!dt && dt.getDay() === day;
+  }
+  var placeRows = rows.filter(function (rec) { return sameDrivePlace(rec, place, destQuery); });
+  var placeBand = placeRows.filter(inBand);
+  var placeBandDay = placeBand.filter(onDay);
+  var ward = place ? asText(place.ward).trim() : '';
+  var wardRows = ward ? rows.filter(function (rec) {
+    return driveWard(rec) === ward && inBand(rec) && onDay(rec) && !sameDrivePlace(rec, place, destQuery);
+  }) : [];
+  var chosen = null;
+  var basis = '';
+  var weak = false;
+  if (placeBandDay.length) {
+    chosen = placeBandDay;
+    basis = '同じ施設・同じ曜日・同じ時間帯';
+  } else if (placeBand.length) {
+    chosen = placeBand;
+    basis = '同じ施設・同じ時間帯';
+  } else if (wardRows.length) {
+    chosen = wardRows;
+    basis = '同じ方面・同じ曜日・同じ時間帯';
+    weak = true;
+  } else return null;
+  var times = chosen.map(driveMoment).filter(Boolean).sort(function (a, b) { return a - b; });
+  return {
+    minutes: medianMinutes(chosen.map(function (rec) { return rec.minutes; })),
+    count: chosen.length,
+    from: times.length ? localISODate(times[0]) : '',
+    to: times.length ? localISODate(times[times.length - 1]) : '',
+    basis: basis,
+    low: weak || chosen.length < 3
+  };
+}
+function fillDriveRoutes(selectedId) {
+  var sel = $('driveRoute');
+  if (!sel) return;
+  var current = selectedId || '';
+  sel.innerHTML = '';
+  var empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = 'ルート未選択';
+  sel.appendChild(empty);
+  (Array.isArray(db.routes) ? db.routes : []).forEach(function (route) {
+    var opt = document.createElement('option');
+    opt.value = String(route.id);
+    opt.textContent = route.name || route.to || '名称未登録';
+    sel.appendChild(opt);
+  });
+  sel.value = current;
+  if (sel.value !== current) sel.value = '';
+}
+function fillDriveForm(routeId) {
+  var ctx = lastDriveContext || {};
+  var route = (Array.isArray(db.routes) ? db.routes : []).find(function (item) { return item && String(item.id) === String(routeId || ctx.routeId || ''); });
+  var origin = ctx.origin || (route && route.from) || db.origin || '';
+  var destination = ctx.destination || (route && route.to) || '';
+  var departAt = ctx.departAt || '';
+  var parts = departAt.split('T');
+  driveFormPlaceId = ctx.placeId || (route && asText(route.placeId)) || '';
+  if ($('driveOrigin')) $('driveOrigin').value = origin;
+  if ($('driveDest')) $('driveDest').value = destination;
+  if ($('driveDate')) $('driveDate').value = parts[0] || '';
+  if ($('driveTime')) $('driveTime').value = parts[1] || '';
+  fillDriveRoutes(route ? route.id : '');
+  var routeName = route ? (route.name || '名称未登録') : '未選択';
+  var when = departAt ? departAt.replace('T', ' ') : '未定';
+  var summary = $('driveSummary');
+  if (summary) summary.textContent = '引き継ぎ：' + (origin || '出発地未登録') + ' → ' + (destination || '目的地未登録') + ' / 出発 ' + when + ' / ルート ' + routeName;
+}
+function openDriveForm() {
+  fillDriveForm(lastDriveContext && lastDriveContext.routeId);
+  var form = $('runEditor');
+  if (form) form.open = true;
+  tab('routes');
+  if (form && form.scrollIntoView) {
+    try { form.scrollIntoView({block: 'start'}); } catch (e) { form.scrollIntoView(); }
+  }
+}
+function saveDriveActual() {
+  var minutes = Number(v('driveMinutesActual'));
+  if (!isFinite(minutes) || minutes <= 0 || minutes > 1440) return alert('実際の走行時間を分で入力してください');
+  var destination = v('driveDest');
+  var origin = v('driveOrigin');
+  var dateText = v('driveDate');
+  var timeText = v('driveTime');
+  if (!destination) return alert('目的地を入力してください');
+  if (!origin) return alert('出発地を入力してください');
+  if (!parseLocalDateTime(dateText, timeText)) return alert('出発日時を入力してください');
+  var place = findPlaceExact(destination);
+  var row = normalizeDrive({
+    origin: origin,
+    destination: place ? place.name : destination,
+    placeId: place ? place.id : driveFormPlaceId,
+    ward: place ? asText(place.ward).trim() : ((lastDriveContext && lastDriveContext.ward) || ''),
+    departAt: dateText + 'T' + timeText,
+    minutes: minutes,
+    routeId: v('driveRoute'),
+    memo: v('driveMemo')
+  });
+  if (!row) return alert('記録できません');
+  if (!Array.isArray(db.drives)) db.drives = [];
+  db.drives.unshift(row);
+  if (!persist()) return;
+  if ($('driveMinutesActual')) $('driveMinutesActual').value = '';
+  if ($('driveMemo')) $('driveMemo').value = '';
+  renderDataCounts();
+  alert('走行時間を保存しました');
+}
+function createDrivePlan() {
+  if (!v('todayDest') || !v('todayDate') || !v('todayTime')) return alert('目的地と到着日時を入力してください');
+  if (!parseLocalDateTime(v('todayDate'), v('todayTime'))) return alert('日時が正しくありません');
+  buildToday();
+  if (!lastDriveContext || lastDriveContext.mode === 'none') {
+    var more = $('todayOptions');
+    if (more) more.open = true;
+    var drive = $('todayDrive');
+    if (drive && drive.focus) {
+      try { drive.focus(); } catch (e) {}
+    }
+  }
+}
 function buildToday(opts) {
   var quiet = !!(opts && opts.quiet);
   var destQuery = v('todayDest');
@@ -2230,15 +2587,13 @@ function buildToday(opts) {
   if (!arriveAt) return alert('日時が正しくありません');
   var driveRaw = v('todayDrive');
   var drive = driveRaw === '' ? NaN : Number(driveRaw);
-  var driveOk = isFinite(drive) && drive > 0 && drive <= 1440;
+  var manualOk = isFinite(drive) && drive > 0 && drive <= 1440;
   var buffer = Number(v('todayBuffer'));
   if (!isFinite(buffer) || buffer < 0) buffer = 0;
   var departText = '未登録';
-  if (driveOk) {
-    var departAt = new Date(arriveAt.getTime());
-    departAt.setMinutes(departAt.getMinutes() - drive - buffer);
-    departText = pad2(departAt.getHours()) + ':' + pad2(departAt.getMinutes());
-  }
+  var departAt = null;
+  var mode = 'none';
+  var learned = null;
   var arriveText = pad2(arriveAt.getHours()) + ':' + pad2(arriveAt.getMinutes());
   var band = timeBand(t);
   var origin = v('todayOrigin');
@@ -2292,6 +2647,28 @@ function buildToday(opts) {
     return ae - be;
   });
   var mapDest = place && asText(place.address).trim() ? placeLabel(place) : (place && asText(place.name).trim() ? place.name : destQuery);
+  learned = estimateDrive(destQuery, arriveAt, place);
+  if (manualOk) {
+    mode = 'manual';
+    departAt = new Date(arriveAt.getTime());
+    departAt.setMinutes(departAt.getMinutes() - drive - buffer);
+    departText = departLabel(departAt, d);
+  } else if (learned && learned.minutes > 0) {
+    mode = 'learned';
+    drive = learned.minutes;
+    departAt = new Date(arriveAt.getTime());
+    departAt.setMinutes(departAt.getMinutes() - drive - buffer);
+    departText = departLabel(departAt, d);
+  }
+  lastDriveContext = {
+    origin: origin || db.origin || '',
+    destination: place ? (asText(place.name).trim() || destQuery) : destQuery,
+    placeId: place ? String(place.id) : '',
+    ward: ward,
+    departAt: departAt ? localISODate(departAt) + 'T' + clockText(departAt) : '',
+    routeId: candidates.length ? String(candidates[0].id) : '',
+    mode: mode
+  };
   var root = $('todayResult');
   if (!root) return;
   clearNode(root);
@@ -2310,10 +2687,22 @@ function buildToday(opts) {
     : '保存ルートがないため、経由地なしで目的地だけ開きます。';
   addBlock(root, 'p', navNote + '右折・左折・必須道路・回避道路はGoogleマップへ送りません。地図側では強制できません。', 'warn');
   addTimeGrid(root, departText, arriveText, buffer + '分');
-  addBlock(root, 'p', '到着日 ' + d + ' / 時間帯 ' + (band || '未登録') + ' / 走行時間（手入力）：' + (driveOk ? drive + '分' : '未入力'), 'muted');
-  addBlock(root, 'p', driveOk
-    ? '出発時刻は、入力した走行時間と余裕からの逆算です。交通予測ではありません。規制と一方通行は未確認で、安全は保証しません。'
-    : '走行時間は未入力です。出発時刻は計算していません。', 'warn');
+  var driveLabel = mode === 'none' ? '未入力' : drive + '分';
+  var driveKind = mode === 'learned' ? '過去の走行実績に基づく推定' : (mode === 'manual' ? '手入力' : '未入力');
+  addBlock(root, 'p', '到着日 ' + d + ' / 時間帯 ' + (band || '未登録') + ' / 走行時間（' + driveKind + '）：' + driveLabel, 'muted');
+  if (mode === 'learned') {
+    addBlock(root, 'p', '過去の走行実績に基づく推定です。リアルタイムの交通情報ではありません。到着は保証しません。', 'warn');
+    addBlock(root, 'p', '根拠：' + learned.basis + ' / ' + learned.count + '件 / ' + learned.from + '〜' + learned.to, 'muted');
+    if (learned.low) addBlock(root, 'p', '記録が少ないため、推定精度は低いです。', 'warn');
+  } else if (mode === 'manual') {
+    addBlock(root, 'p', '出発時刻は、入力した走行時間と余裕からの逆算です。交通予測ではありません。規制と一方通行は未確認で、安全は保証しません。', 'warn');
+  } else {
+    addBlock(root, 'p', 'この条件の走行実績がありません。時間は作っていません。Googleマップで所要時間を確認し、走行時間を手入力してください。', 'warn');
+    var checkMap = addBlock(root, 'button', 'Googleマップで所要時間を確認');
+    checkMap.onclick = function () { maps(mapDest, origin); };
+  }
+  var recordBtn = addBlock(root, 'button', '停車後に走行時間を記録');
+  recordBtn.onclick = function () { openDriveForm(); };
   var gaps = [];
   addBlock(root, 'h3', '目的地');
   if (place) {
