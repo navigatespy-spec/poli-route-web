@@ -449,6 +449,17 @@ details.panel>summary{margin:-2px 0 4px}
 <button type="button" onclick="importFile('file','places')">施設リストを取り込む</button>
 </div>
 <div class="panel">
+<h3>降車アドバイス（調査メモ）を追加</h3>
+<p class="muted">公開情報から作った調査メモを、施設名と住所が一致する店舗にだけ追加します。未確認の降車場所は推奨しません。既存の運転ルール・ルートは変更しません。</p>
+<input type="file" id="adviceFile" accept=".json,application/json">
+<button type="button" onclick="previewAdviceImport()">照合結果を確認</button>
+<p id="advicePreview" class="muted"></p>
+<div id="adviceActions" class="buttons hidden">
+<button type="button" onclick="applyAdviceImport()">一致した調査メモだけ追加</button>
+<button type="button" class="ghost" onclick="cancelAdviceImport()">キャンセル</button>
+</div>
+</div>
+<div class="panel">
 <h3>運転ノウハウの一括取り込み</h3>
 <p class="muted">方面の優先道路、回避と理由、時間帯の注意、必須地点、右左折、ルートメモをJSONで追加します。確認するまで既存データは変わりません。追加は重複を残し、更新は同じ項目だけ差し替えます。</p>
 <input type="file" id="knowhowFile" accept=".json,application/json,text/json,text/plain,.txt">
@@ -1595,6 +1606,69 @@ async function importFile(inputId, mode) {
   } finally {
     if (input) input.value = '';
   }
+}
+var pendingAdviceImport = null;
+function adviceAddressKey(value) {
+  return foldName(value).replace(/東京都|東京|港区|中央区|渋谷区|新宿区|目黒区|千代田区|品川区|世田谷区|文京区|豊島区|台東区|中野区|杉並区|江東区|墨田区|大田区|北区|荒川区|板橋区|練馬区|足立区|葛飾区|江戸川区/g, '');
+}
+function adviceMatches(record) {
+  var name = foldName(record && record.name);
+  var address = adviceAddressKey(record && record.address);
+  if (!name || !address) return [];
+  return (db.places || []).filter(function(p) {
+    var a = adviceAddressKey(p.address);
+    // Require a unique, matching facility name AND a nonempty exact address.
+    return foldName(p.name) === name && !!a && a === address;
+  });
+}
+function cancelAdviceImport() {
+  pendingAdviceImport = null;
+  if ($('adviceActions')) $('adviceActions').classList.add('hidden');
+  if ($('advicePreview')) $('advicePreview').textContent = '取り込みをキャンセルしました。';
+  if ($('adviceFile')) $('adviceFile').value = '';
+}
+async function previewAdviceImport() {
+  pendingAdviceImport = null;
+  if ($('adviceActions')) $('adviceActions').classList.add('hidden');
+  var f = $('adviceFile') && $('adviceFile').files[0];
+  if (!f) return alert('調査メモJSONを選んでください');
+  try {
+    if (f.size > 500000) throw new Error('ファイルが大きすぎます');
+    var data = JSON.parse((await readFileText(f)).replace(/^\uFEFF/, ''));
+    if (data.purpose !== 'review_only_not_app_import' || !Array.isArray(data.records) || data.records.length > 100) throw new Error('専用の調査メモJSONではありません');
+    var matched = [], missing = 0, ambiguous = 0, existing = 0, seen = new Set();
+    data.records.forEach(function(rec) {
+      if (!rec || typeof rec !== 'object' || typeof rec.name !== 'string' || typeof rec.address !== 'string') { missing++; return; }
+      var candidates = adviceMatches(rec);
+      if (candidates.length === 1) {
+        var target = candidates[0];
+        if (asText(target.dropoffResearch).trim()) existing++;
+        else if (!seen.has(String(target.id))) { matched.push({id:String(target.id),record:rec}); seen.add(String(target.id)); }
+      }
+      else if (candidates.length > 1) ambiguous++;
+      else missing++;
+    });
+    pendingAdviceImport = matched;
+    $('advicePreview').textContent = '調査メモ' + data.records.length + '件 / 施設名・住所が一致 ' + matched.length + '件 / 不一致 ' + missing + '件 / 同名候補複数 ' + ambiguous + '件 / 既存メモ保護 ' + existing + '件。既存のメモを上書きせず、確認済みの降車地点としては扱いません。';
+    if (matched.length) $('adviceActions').classList.remove('hidden');
+  } catch(e) { $('advicePreview').textContent = '読み込み不可：' + (e.message || '形式不正'); }
+}
+function applyAdviceImport() {
+  if (!pendingAdviceImport || !pendingAdviceImport.length) return;
+  var updates = pendingAdviceImport.slice();
+  var savedCount = 0;
+  var ok = withSavedChange(function() {
+    updates.forEach(function(item) {
+      var p = placeById(item.id);
+      if (!p) throw new Error('施設が見つかりません');
+      if (asText(p.dropoffResearch).trim()) return;
+      var rec = item.record;
+      var text = [rec.advice, '根拠区分：' + asText(rec.evidence_level), '参照：' + asText(rec.source_url), '降車地点・規制は未確認。最終判断は運転者。'].join(' / ');
+      p.dropoffResearch = text.slice(0,1800);
+      savedCount++;
+    });
+  });
+  if (ok) { alert('調査メモを' + savedCount + '施設に保存しました。既存メモと運転ルールは変更していません。'); cancelAdviceImport(); }
 }
 function knowhowLevel(value) {
   var t = asText(value).trim();
@@ -3015,6 +3089,7 @@ function buildToday(opts) {
     addBlock(root, 'p', (asText(place.name) || destQuery) + (addr ? '　' + addr : ''));
     if (!addr) gaps.push('住所');
     if (asText(place.memo).trim()) addBlock(root, 'p', '施設メモ：' + place.memo, 'muted');
+    if (asText(place.dropoffResearch).trim()) { addBlock(root, 'h3', '降車の事前確認メモ（停車場所は未確定）'); addBlock(root, 'p', place.dropoffResearch, 'muted'); }
   } else {
     addBlock(root, 'p', destQuery);
     gaps.push('施設マスター');
