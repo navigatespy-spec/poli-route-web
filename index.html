@@ -2387,6 +2387,36 @@ function todayMap() {
   var to = m.place ? (placeLabel(m.place) || m.place.name) : d;
   maps(to, v('todayOrigin'));
 }
+function renderDropoffResearch(root, raw) {
+  var original = asText(raw).trim();
+  if (!original) return;
+  addBlock(root, 'h3', '降車アドバイス（停車場所は未確認）');
+  var chunks = original.split(/\s*\/\s*(?=根拠区分：|参照：|降車地点・規制は未確認)/);
+  var advice = chunks[0].trim();
+  var evidence = chunks.find(function(x){return x.indexOf('根拠区分：') === 0;}) || '';
+  var source = chunks.find(function(x){return x.indexOf('参照：') === 0;}) || '';
+  if (!evidence && !source) {
+    addBlock(root, 'p', original, 'muted');
+    return;
+  }
+  addBlock(root, 'p', advice || '店舗前の停車可否と進入方向を確認してください。');
+  addBlock(root, 'p', '停車規制・進入方向・徒歩動線は未確認。現地で確認し、最終判断は運転者が行ってください。', 'muted');
+  var details = document.createElement('details');
+  var summary = document.createElement('summary');
+  summary.textContent = '根拠・参照元を見る';
+  details.appendChild(summary);
+  var evidenceP = document.createElement('p');
+  evidenceP.className = 'muted';
+  evidenceP.textContent = evidence || '根拠区分：未登録';
+  details.appendChild(evidenceP);
+  if (source) {
+    var sourceP = document.createElement('p');
+    sourceP.className = 'muted';
+    sourceP.textContent = source;
+    details.appendChild(sourceP);
+  }
+  root.appendChild(details);
+}
 function addBlock(root, tag, txt, cls) {
   var el = document.createElement(tag);
   el.textContent = txt;
@@ -3089,7 +3119,7 @@ function buildToday(opts) {
     addBlock(root, 'p', (asText(place.name) || destQuery) + (addr ? '　' + addr : ''));
     if (!addr) gaps.push('住所');
     if (asText(place.memo).trim()) addBlock(root, 'p', '施設メモ：' + place.memo, 'muted');
-    if (asText(place.dropoffResearch).trim()) { addBlock(root, 'h3', '降車の事前確認メモ（停車場所は未確定）'); addBlock(root, 'p', place.dropoffResearch, 'muted'); }
+    if (asText(place.dropoffResearch).trim()) renderDropoffResearch(root, place.dropoffResearch);
   } else {
     addBlock(root, 'p', destQuery);
     gaps.push('施設マスター');
