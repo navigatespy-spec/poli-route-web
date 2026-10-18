@@ -292,6 +292,7 @@ details.panel>summary{margin:-2px 0 4px}
 <textarea id="rm" rows="2" placeholder="なければ空欄"></textarea>
 <button type="button" class="primary" id="routeSave" onclick="addRoute()">ルートを保存</button>
 <p id="routeStatus" class="note hidden"></p>
+<p class="muted">保存後はこの端末の保存データを読み直して確認します。Safariとホーム画面アプリの保存データは別の場合があります。</p>
 <button type="button" class="ghost" onclick="clearRouteForm()">入力をクリア</button>
 <details id="routeDetail">
 <summary>詳細編集</summary>
@@ -1323,9 +1324,27 @@ function addRoute() {
       else db.routes.unshift(route);
     } else db.routes.unshift(route);
   })) return setStatus('routeStatus', false, '保存できませんでした');
+  // Verify the saved route by its ID against persistent storage, not only db.
+  var verified = false;
+  var savedCount = 0;
+  try {
+    var stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    savedCount = stored && Array.isArray(stored.routes) ? stored.routes.length : 0;
+    verified = !!(stored && Array.isArray(stored.routes) && stored.routes.some(function (item) {
+      return item && String(item.id) === String(route.id) && item.to === route.to && item.from === route.from;
+    }));
+  } catch (e) { verified = false; }
+  if (!verified) {
+    // Do not show a misleading success message; leave the editor open for recovery.
+    setStatus('routeStatus', false, '保存の再確認に失敗しました。入力はそのままです。バックアップを確認してください。');
+    return;
+  }
   clearRouteForm();
+  if ($('routeSearch')) $('routeSearch').value = '';
   renderRoutes();
-  setStatus('routeStatus', true, wasEdit ? 'ルートを更新しました' : 'ルートを保存しました');
+  checkStorageContext();
+  var displayMode = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true ? 'ホーム画面アプリ' : 'Safariなどのブラウザ';
+  setStatus('routeStatus', true, (wasEdit ? 'ルートを更新しました' : 'ルートを保存しました') + '。保存済みルート' + savedCount + '件（' + displayMode + '）。下の一覧に表示しています。');
 }
 function renderRoutes() {
   var box = $('routesList');
