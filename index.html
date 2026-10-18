@@ -214,6 +214,12 @@ details.panel>summary{margin:-2px 0 4px}
 <input id="parkAddress" autocomplete="off">
 <label for="dropoff">乗降位置・徒歩案内</label>
 <textarea id="dropoff" placeholder="例：正面の車寄せ。停車規制は現地確認"></textarea>
+<label for="dropWalk">入口までの徒歩時間（分・確認済みの場合）</label>
+<input id="dropWalk" type="number" min="0" max="120" inputmode="numeric" placeholder="未確認なら空欄">
+<label for="dropCrossing">車道の横断</label>
+<select id="dropCrossing"><option value="unknown">未確認</option><option value="no">横断なし</option><option value="yes">横断あり</option></select>
+<label for="dropApproach">進入方向・停車可否の根拠（任意）</label>
+<input id="dropApproach" placeholder="現地確認した情報のみ" autocomplete="off">
 <label for="dropStatus">乗降場所の確認状況</label>
 <select id="dropStatus">
 <option>要現地確認</option>
@@ -340,6 +346,10 @@ details.panel>summary{margin:-2px 0 4px}
 <p id="driveSummary" class="muted">今日の運転でプランを作ると、出発地と目的地を引き継ぎます。</p>
 <label for="driveMinutesActual">実際の走行時間（分）</label>
 <input id="driveMinutesActual" type="number" min="1" max="1440" inputmode="numeric" placeholder="停車後に入力">
+<label for="driveRoadType">走行した道路（比較用）</label>
+<select id="driveRoadType"><option value="">未選択</option><option value="local">下道</option><option value="express">高速</option></select>
+<label for="driveToll">高速料金（円・任意）</label>
+<input id="driveToll" type="number" min="0" inputmode="numeric" placeholder="わかる場合だけ入力">
 <label for="driveMemo">メモ（任意）</label>
 <input id="driveMemo" placeholder="空欄でも保存できます" autocomplete="off">
 <button type="button" id="driveDetailBtn" onclick="toggleDriveDetail()">出発地・日時・ルートを直す</button>
@@ -797,6 +807,9 @@ function normalizeParking(p) {
   o.place = asText(p.place);
   o.address = asText(p.address);
   o.dropoff = asText(p.dropoff);
+  o.walkMinutes = p.walkMinutes === '' || p.walkMinutes == null ? '' : asText(p.walkMinutes);
+  o.crossing = ['yes','no'].indexOf(p.crossing) >= 0 ? p.crossing : 'unknown';
+  o.approach = asText(p.approach);
   o.status = asText(p.status);
   o.name = asText(p.name);
   o.location = asText(p.location);
@@ -2163,6 +2176,9 @@ function saveParking() {
     placeId: linkedPlace ? String(linkedPlace.id) : '',
     address: v('parkAddress'),
     dropoff: drop,
+    walkMinutes: v('dropWalk'),
+    crossing: v('dropCrossing'),
+    approach: v('dropApproach'),
     status: v('dropStatus'),
     name: name,
     location: v('parkLocation'),
@@ -2173,7 +2189,7 @@ function saveParking() {
     memo: v('parkMemo')
   };
   if (!withSavedChange(function () { parkingArray().unshift(row); })) return;
-  ['parkPlace', 'parkAddress', 'dropoff', 'parkName', 'parkLocation', 'parkPrice', 'parkMemo'].forEach(function (k) {
+  ['parkPlace', 'parkAddress', 'dropoff', 'dropWalk', 'dropApproach', 'parkName', 'parkLocation', 'parkPrice', 'parkMemo'].forEach(function (k) {
     if ($(k)) $(k).value = '';
   });
   renderParking();
@@ -2525,7 +2541,9 @@ function normalizeDrive(row) {
     departAt: departAt,
     minutes: Math.round(minutes),
     routeId: asText(row.routeId).trim(),
-    memo: asText(row.memo).trim()
+    memo: asText(row.memo).trim(),
+    roadType: ['local','express'].indexOf(row.roadType) >= 0 ? row.roadType : '',
+    toll: row.toll === '' || row.toll == null ? '' : (Number.isFinite(Number(row.toll)) && Number(row.toll) >= 0 ? Math.round(Number(row.toll)) : '')
   };
 }
 function driveMoment(rec) {
@@ -2692,7 +2710,9 @@ function saveDriveActual() {
     departAt: dateText + 'T' + timeText,
     minutes: minutes,
     routeId: v('driveRoute'),
-    memo: v('driveMemo')
+    memo: v('driveMemo'),
+    roadType: v('driveRoadType'),
+    toll: v('driveToll')
   });
   if (!row) return setStatus('driveStatus', false, '記録できません');
   if (!withSavedChange(function () {
@@ -2701,6 +2721,8 @@ function saveDriveActual() {
   })) return setStatus('driveStatus', false, '保存できませんでした');
   if ($('driveMinutesActual')) $('driveMinutesActual').value = '';
   if ($('driveMemo')) $('driveMemo').value = '';
+  if ($('driveRoadType')) $('driveRoadType').value = '';
+  if ($('driveToll')) $('driveToll').value = '';
   renderDataCounts();
   renderDrives();
   setStatus('driveStatus', true, '走行時間を保存しました');
@@ -2753,6 +2775,72 @@ function createDrivePlan() {
       try { drive.focus(); } catch (e) {}
     }
   }
+}
+// Decision support uses only locally recorded, comparable journeys. Never infer live traffic.
+function showDrivingSuggestions(root, place, destQuery, origin, arriveAt, departAt, dropoffs) {
+  addBlock(root, 'h3', '運転の判断材料（最終判断は運転者）');
+  var comparisonBand = departAt && typeof departAt.getHours === 'function' && !isNaN(departAt.getTime()) ? timeBand(pad2(departAt.getHours()) + ':' + pad2(departAt.getMinutes())) : '';
+  // Do not compare weekend and weekday journeys as if traffic conditions were equivalent.
+  // Historical records without a valid departure timestamp are excluded.
+  var comparisonDate = departAt && !isNaN(departAt.getTime()) ? departAt : null;
+  var comparisonDayType = comparisonDate ? ((comparisonDate.getDay() === 0 || comparisonDate.getDay() === 6) ? 'weekend' : 'weekday') : '';
+  var base = (Array.isArray(db.drives) ? db.drives : []).filter(function(rec) {
+    var recordedDate = driveMoment(rec);
+    var recordedDayType = recordedDate ? ((recordedDate.getDay() === 0 || recordedDate.getDay() === 6) ? 'weekend' : 'weekday') : '';
+    return !!(comparisonBand && comparisonDayType && asText(origin).trim() && rec &&
+      sameDriveOrigin(rec, origin) && sameDrivePlace(rec, place, destQuery) &&
+      ['local','express'].indexOf(rec.roadType) >= 0 && recordedDayType === comparisonDayType &&
+      timeBand(pad2(recordedDate.getHours()) + ':' + pad2(recordedDate.getMinutes())) === comparisonBand);
+  });
+  addBlock(root, 'p', '比較条件：' + (comparisonDayType === 'weekend' ? '土日' : comparisonDayType === 'weekday' ? '平日' : '曜日不明') + '・同じ出発時間帯。祝日・現在の渋滞は判定していません。', 'muted');
+  var local = base.filter(function(r){ return r.roadType === 'local'; });
+  var express = base.filter(function(r){ return r.roadType === 'express'; });
+  if (local.length >= 2 && express.length >= 2) {
+    var l = medianMinutes(local.map(function(r){return r.minutes;}));
+    var e = medianMinutes(express.map(function(r){return r.minutes;}));
+    var tolls = express.filter(function(r){return r.toll !== '' && Number.isFinite(Number(r.toll));}).map(function(r){return Number(r.toll);});
+    var diff = l - e;
+    addBlock(root, 'p', '下道 ' + l + '分（' + local.length + '件） / 高速 ' + e + '分（' + express.length + '件）', 'line');
+    addBlock(root, 'p', diff > 0 ? '高速は過去実績の中央値で' + diff + '分短いです。料金と到着余裕を比較して選んでください。' : diff < 0 ? '下道は過去実績の中央値で' + (-diff) + '分短いです。高速の利点は確認できません。' : '両方の過去実績の中央値は同じです。料金と道路状況で判断してください。', 'muted');
+    addBlock(root, 'p', '高速料金の記録：' + (tolls.length ? '中央値' + medianMinutes(tolls) + '円（' + tolls.length + '件）' : '未登録') + '。リアルタイム渋滞・現在の規制は未反映。', 'muted');
+  } else {
+    addBlock(root, 'p', '高速・下道の比較は根拠不足です。同じ目的地・出発地・平日/土日・出発時間帯で、各2件以上の記録が必要です（下道' + local.length + '件 / 高速' + express.length + '件）。', 'muted');
+  }
+  addBlock(root, 'h3', '降車場所の候補');
+  var options = (dropoffs || []).filter(function(p) {
+    return p && asText(p.dropoff).trim() && asText(p.status) !== '利用不可';
+  }).slice();
+  if (!options.length) return addBlock(root, 'p', '登録された降車候補がありません。店前を含め停車規制と歩行動線を現地で確認してください。', 'muted');
+  function walkValue(p) {
+    var raw = asText(p.walkMinutes).trim();
+    return /^\d+$/.test(raw) && Number(raw) <= 120 ? Number(raw) : null;
+  }
+  function candidateClass(p) {
+    var walk = walkValue(p);
+    // Confirmation of a location is not confirmation of current legal stopping conditions.
+    if (asText(p.status) !== '現地確認済み') return 2;
+    if (p.crossing !== 'no' || walk === null || walk > 3) return 1;
+    return 0;
+  }
+  options.sort(function(a,b) {
+    var ca = candidateClass(a), cb = candidateClass(b);
+    if (ca !== cb) return ca - cb;
+    var wa = walkValue(a), wb = walkValue(b);
+    return (wa === null ? 999 : wa) - (wb === null ? 999 : wb);
+  });
+  addBlock(root, 'p', '以下は登録済みの候補です。現在の停車規制や安全を確認したうえで運転者が選択してください。', 'muted');
+  options.forEach(function(p) {
+    var walk = walkValue(p);
+    var crossing = p.crossing === 'no' ? '横断なし（記録）' : (p.crossing === 'yes' ? '横断あり' : '横断未確認');
+    var level = candidateClass(p);
+    var label = level === 0 ? '条件が比較的よい候補（停車可否は要確認）' : level === 1 ? '要追加確認の候補' : '未確認候補';
+    addBlock(root, 'p', label + '：' + asText(p.dropoff) + ' / 徒歩' + (walk === null ? '未確認' : walk + '分') + ' / ' + crossing, 'line');
+    if (walk !== null && walk > 3) addBlock(root, 'p', '徒歩3分の目安を超えています。', 'warn');
+    if (asText(p.approach).trim()) addBlock(root, 'p', '記録された進入情報：' + p.approach, 'muted');
+    if (level !== 0) addBlock(root, 'p', '徒歩時間・横断・現地確認状況に不足または注意点があります。', 'warn');
+    addBlock(root, 'p', '停車の合法性・現在の規制・歩行者の安全は現地で再確認してください。', 'muted');
+  });
+  addBlock(root, 'p', '停車禁止・一方通行・歩行者規制を優先し、安全に停車できない場合は無理に降ろさないでください。', 'muted');
 }
 function buildToday(opts) {
   var quiet = !!(opts && opts.quiet);
@@ -2937,6 +3025,7 @@ function buildToday(opts) {
   if (origin) addBlock(root, 'p', '出発地：' + origin, 'muted');
   else gaps.push('出発地');
   var dropoffs = m.parking.filter(function (p) { return asText(p.dropoff).trim() && asText(p.status) !== '利用不可'; });
+  showDrivingSuggestions(root, place, destQuery, origin, arriveAt, departAt, dropoffs);
   var blockedDropoffs = m.parking.filter(function (p) { return asText(p.dropoff).trim() && asText(p.status) === '利用不可'; });
   if (dropoffs.length) {
     addBlock(root, 'h3', '乗降場所');
