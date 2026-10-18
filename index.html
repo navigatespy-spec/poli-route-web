@@ -261,10 +261,10 @@ details.panel>summary{margin:-2px 0 4px}
 <section id="routes" class="hidden">
 <div class="panel" id="routeEditor">
 <h2>ルートを保存</h2>
-<p class="muted">目的地と、通った地点を残します。</p>
+<p class="muted">行き先と通った道を入力して、最後に「ルートを保存」を押すだけ。</p>
 <label for="rt">目的地</label>
 <input id="rt" placeholder="施設名または住所" autocomplete="off">
-<h3>通った地点</h3>
+<h3>通った地点 <span class="muted">（任意）</span></h3>
 <label for="rp">道路・交差点</label>
 <input id="rp" placeholder="交差点・道路名" autocomplete="off">
 <div id="rpSuggest" class="suggest hidden"></div>
@@ -286,16 +286,17 @@ details.panel>summary{margin:-2px 0 4px}
 </select>
 </div>
 </div>
-<button type="button" onclick="addDraftPoint()">別の地点も追加する（任意）</button>
+<button type="button" onclick="addDraftPoint()">2つ目以降の地点を追加</button>
 <div id="draftPoints"></div>
 <label for="rm">次回の注意事項</label>
 <textarea id="rm" rows="2" placeholder="なければ空欄"></textarea>
 <button type="button" class="primary" id="routeSave" onclick="addRoute()">ルートを保存</button>
 <p id="routeStatus" class="note hidden"></p>
-<p class="muted">保存後はこの端末の保存データを読み直して確認します。Safariとホーム画面アプリの保存データは別の場合があります。</p>
+
 <button type="button" class="ghost" onclick="clearRouteForm()">入力をクリア</button>
 <details id="routeDetail">
-<summary>詳細編集</summary>
+<summary>詳細編集（出発地・時間帯・道路の指定）</summary>
+<p class="muted">保存後に端末のデータを読み直して確認します。Safariとホーム画面アプリは保存先が異なる場合があります。</p>
 <p class="muted">ルート名、出発地、優先道路、回避道路、時間帯です。右折・左折・必須は地図へ渡せません。</p>
 <label for="rn">ルート名</label>
 <input id="rn" placeholder="空欄なら目的地から付けます" autocomplete="off">
